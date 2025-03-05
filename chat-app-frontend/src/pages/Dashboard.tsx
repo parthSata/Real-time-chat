@@ -1,7 +1,8 @@
+// src/components/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Menu, Search, Plus } from 'lucide-react';
+import { Menu, Search, Plus, LogOut } from 'lucide-react';
 import AnimatedPage from '../components/AnimatedPage';
 import ChatList from '../components/ChatList';
 import Sidebar from '../components/Sidebar';
@@ -9,7 +10,7 @@ import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../context/AuthContext';
 
-// Mock data
+// Mock data (replace with API call later)
 const mockChats = [
   {
     id: '1',
@@ -31,7 +32,7 @@ const mockChats = [
     id: '3',
     name: 'Jessica Williams',
     avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica',
-    lastMessage: 'Let\'s meet for coffee tomorrow!',
+    lastMessage: "Let's meet for coffee tomorrow!",
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
     unread: 1,
   },
@@ -51,45 +52,23 @@ const mockChats = [
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
     unread: 0,
   },
-  {
-    id: '6',
-    name: 'Emma Thompson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    lastMessage: 'I just sent you the files you requested.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    unread: 0,
-  },
-  {
-    id: '7',
-    name: 'Emma Thompson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    lastMessage: 'I just sent you the files you requested.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    unread: 0,
-  },
-  {
-    id: '8',
-    name: 'Emma Thompson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    lastMessage: 'I just sent you the files you requested.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    unread: 0,
-  },
 ];
 
 const Dashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredChats, setFilteredChats] = useState(mockChats);
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const navigate = useNavigate();
 
+  // Redirect only after loading is complete and session is invalid
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       navigate('/login');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, loading, navigate]);
 
+  // Filter chats based on search query
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredChats(mockChats);
@@ -105,32 +84,70 @@ const Dashboard: React.FC = () => {
     }
   }, [searchQuery]);
 
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
+  // Show loading state while session is being validated
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#111827]">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1 }}
+          className="text-white"
+        >
+          Loading...
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <AnimatedPage>
       <div className="min-h-screen bg-card dark:bg-background flex flex-col md:flex-row">
-        {/* Sidebar (only visible on mobile or when explicitly opened) */}
+        {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-        {/* Main content (full width on all screens, no left padding) */}
+        {/* Main content */}
         <div className="flex-1 bg-[#111827]">
-          <header className="bg-card  dark:bg-gray-800 shadow-sm sticky top-0 z-10">
-            <div className="px-4 py-3 flex items-center  justify-between">
-              <div className="flex items-center ">
+          <header className="bg-card dark:bg-gray-800 shadow-sm sticky top-0 z-10">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center">
                 <button
                   onClick={() => setIsSidebarOpen(true)}
                   className="md:hidden p-2 rounded-md text-foreground dark:text-white hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
                 >
                   <Menu size={24} />
                 </button>
-                <h1 className="ml-2 md:ml-0 text-xl font-semibold text-foreground dark:text-white">Messages</h1>
+                <h1 className="ml-2 md:ml-0 text-xl font-semibold text-foreground dark:text-white">
+                  Messages
+                </h1>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-[#0284c7] bg-primary text-primary-foreground shadow-md"
-              >
-                <Plus size={20} className="text-white"  />
-              </motion.button>
+              <div className="flex items-center space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="p-2 rounded-full bg-[#0284c7] text-primary-foreground shadow-md"
+                >
+                  <Plus size={20} className="text-white" />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleLogout}
+                  className="p-2 rounded-full bg-red-500 text-white shadow-md"
+                  title="Logout"
+                >
+                  <LogOut size={20} />
+                </motion.button>
+              </div>
             </div>
             <div className="px-4 py-2 border-b border-border dark:border-gray-700">
               <div className="relative">
@@ -142,14 +159,19 @@ const Dashboard: React.FC = () => {
                   placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-white placeholder:text-[#111827] text-[#111827]   border border-input dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="pl-10 bg-white placeholder:text-[#111827] text-[#111827] border border-input dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
                   fullWidth
                 />
               </div>
             </div>
           </header>
 
-          <main className="p-4 flex-1 ">
+          <main className="p-4 flex-1">
+            {user && (
+              <div className="mb-4 text-white">
+                Welcome, {user.name}!
+              </div>
+            )}
             {filteredChats.length > 0 ? (
               <ChatList chats={filteredChats} />
             ) : (
@@ -159,11 +181,7 @@ const Dashboard: React.FC = () => {
                 className="text-center py-10"
               >
                 <p className="text-muted-foreground dark:text-gray-400">No conversations found</p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="mt-4"
-                >
+                <Button variant="primary" size="sm" className="mt-4">
                   Start a new chat
                 </Button>
               </motion.div>

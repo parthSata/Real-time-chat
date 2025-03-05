@@ -1,6 +1,6 @@
-// context/AuthContext.js (or .tsx for TypeScript)
+// src/context/AuthContext.tsx
 import React, { createContext, useState, useContext, useEffect, ReactNode } from "react";
-import axios from "axios"; // Ensure axios is installed
+import axios, { AxiosError, AxiosResponse } from "axios";
 
 interface User {
   id: string;
@@ -12,6 +12,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  loading: boolean; // Added loading state
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, profilePic?: File) => Promise<void>;
   logout: () => Promise<void>;
@@ -19,7 +20,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
@@ -30,115 +31,143 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true); // Start as true until session is checked
 
+  // Restore session from localStorage on mount
   useEffect(() => {
-    // Check if user is stored in localStorage
     const storedUser = localStorage.getItem("chatUser");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser) as User;
+      setUser(parsedUser);
       setIsAuthenticated(true);
     }
+    setLoading(false); // Session check complete
   }, []);
 
   const register = async (name: string, email: string, password: string, profilePic?: File) => {
     try {
       const formData = new FormData();
-      formData.append("username", name); // Map name to username for backend compatibility
+      formData.append("username", name);
       formData.append("email", email);
       formData.append("password", password);
       if (profilePic) {
-        formData.append("profilePic", profilePic); // Optional profile picture upload
+        formData.append("profilePic", profilePic);
       }
 
-      // Send registration request to backend
-      const response = await axios.post(
-        "http://localhost:3000/api/v1/users/register", // Update port if your backend runs on a different port
+      const response: AxiosResponse = await axios.post(
+        "http://localhost:3000/api/v1/users/register",
         formData,
         {
           headers: {
-            "Content-Type": "multipart/form-data", // Required for form-data
+            "Content-Type": "multipart/form-data",
           },
-          withCredentials: true, // Include cookies (for token in cookies)
+          withCredentials: true,
         }
       );
 
-      // Extract user data from response and map to your User interface
-      const backendUser = response.data.data.user;
-      const authUser: User = {
-        id: backendUser.id,
-        name: backendUser.username, // Map backend username to name
-        email: backendUser.email,
-        avatar: backendUser.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`, // Use Cloudinary URL or fallback to avatar
-      };
+      console.log("Register API response:", response.data);
 
-      setUser(authUser);
-      setIsAuthenticated(true);
-      localStorage.setItem("chatUser", JSON.stringify(authUser));
+      if (response.status >= 200 && response.status < 300) {
+        const backendUser = response.data.user;
+        if (!backendUser) {
+          throw new Error("No user data returned from server");
+        }
 
-      return; // No need to return response.data unless needed elsewhere
-    } catch (error: any) {
-      throw new Error(
-        error.response?.data?.message || "Failed to register user"
-      );
+        const authUser: User = {
+          id: backendUser.id,
+          name: backendUser.username,
+          email: backendUser.email,
+          avatar: backendUser.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+        };
+
+        setUser(authUser);
+        setIsAuthenticated(true);
+        localStorage.setItem("chatUser", JSON.stringify(authUser));
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error) {
+      const err = error as AxiosError<any>;
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to register user";
+      throw new Error(errorMessage);
     }
   };
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post(
+      const response: AxiosResponse = await axios.post(
         "http://localhost:3000/api/v1/users/login",
         { email, password },
-        { withCredentials: true } // Include cookies
+        { withCredentials: true }
       );
 
-      // Extract user data from response and map to your User interface
-      const backendUser = response.data.data.user;
-      const authUser: User = {
-        id: backendUser.id,
-        name: backendUser.username, // Map backend username to name
-        email: backendUser.email,
-        avatar: backendUser.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`, // Use Cloudinary URL or fallback
-      };
+      console.log("Login API response:", response.data);
 
-      setUser(authUser);
-      setIsAuthenticated(true);
-      localStorage.setItem("chatUser", JSON.stringify(authUser));
+      if (response.status >= 200 && response.status < 300) {
+        const backendUser = response.data.user;
+        if (!backendUser) {
+          throw new Error("No user data returned from server");
+        }
 
-      return; // No need to return response.data unless needed elsewhere
-    } catch (error: any) {
-      throw new Error(
-        error.response?.data?.message || "Failed to login user"
-      );
+        const authUser: User = {
+          id: backendUser.id,
+          name: backendUser.username,
+          email: backendUser.email,
+          avatar: backendUser.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+        };
+
+        setUser(authUser);
+        setIsAuthenticated(true);
+        localStorage.setItem("chatUser", JSON.stringify(authUser));
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error) {
+      const err = error as AxiosError<any>;
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to login user";
+      throw new Error(errorMessage);
     }
   };
 
   const logout = async () => {
     try {
-      await axios.post(
+      const response: AxiosResponse = await axios.post(
         "http://localhost:3000/api/v1/users/logout",
         {},
-        { withCredentials: true } // Include cookies
+        { withCredentials: true }
       );
 
-      setUser(null);
-      setIsAuthenticated(false);
-      localStorage.removeItem("chatUser");
-    } catch (error: any) {
-      throw new Error(
-        error.response?.data?.message || "Failed to logout user"
-      );
+      if (response.status >= 200 && response.status < 300) {
+        setUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem("chatUser");
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error) {
+      const err = error as AxiosError<any>;
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to logout user";
+      throw new Error(errorMessage);
     }
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     isAuthenticated,
+    loading, // Expose loading state
     login,
     register,
     logout,
   };
 
-  return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

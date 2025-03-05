@@ -1,11 +1,11 @@
 // controllers/user.controller.js
 import { User } from "../models/user.model.js";
 import bcrypt from "bcrypt";
-import path from "path"; // Import path for file handling
 import { uploadInCloudinary } from "../utils/cloudinary.js"; // Adjust the path to your cloudinary file
-import { asyncHandler } from "../utils/asyncHandler.js"; // Import asyncHandler (adjust path as needed)
-import { ApiError } from "../utils/ApiError.js"; // Import ApiError (adjust path as needed)
-import ApiResponse from "../utils/ApiResponse.js"; // Import ApiResponse (adjust path as needed)
+
+
+
+
 const registerUser = async (req, res) => {
   try {
     // Extract form-data fields from req.body (text fields)

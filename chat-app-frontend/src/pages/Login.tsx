@@ -1,3 +1,4 @@
+// src/components/Login.tsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -12,19 +13,24 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(''); // Added success state
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setIsLoading(true);
 
     try {
       await login(email, password);
-      navigate('/dashboard');
-    } catch (err) {
-      setError('Invalid email or password');
+      setSuccess('Login successful! Redirecting to dashboard...');
+      setTimeout(() => {
+        navigate('/dashboard'); // Redirect to /dashboard after delay
+      }, 2000); // 2-second delay to show success message
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password');
     } finally {
       setIsLoading(false);
     }
@@ -74,6 +80,16 @@ const Login: React.FC = () => {
                 className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm"
               >
                 {error}
+              </motion.div>
+            )}
+
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-green-100 text-green-700 rounded-md text-sm"
+              >
+                {success}
               </motion.div>
             )}
 
@@ -141,7 +157,7 @@ const Login: React.FC = () => {
               >
                 <Button
                   type="submit"
-                  className='bg-[#0284c7]'
+                  className="bg-[#0284c7]"
                   fullWidth
                   isLoading={isLoading}
                 >
@@ -157,7 +173,7 @@ const Login: React.FC = () => {
               className="mt-6 text-center text-sm"
             >
               <span className="text-gray-500">Don't have an account?</span>{' '}
-              <Link to="/register" className="font-medium text-primary-600  hover:text-primary-500">
+              <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">
                 Sign up
               </Link>
             </motion.div>

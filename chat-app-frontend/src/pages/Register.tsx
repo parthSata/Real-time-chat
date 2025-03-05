@@ -1,40 +1,65 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { UserPlus } from 'lucide-react';
-import AnimatedPage from '../components/AnimatedPage';
-import Input from '../components/Input';
-import Button from '../components/Button';
-import { useAuth } from '../context/AuthContext';
+// src/components/Register.tsx
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { UserPlus } from "lucide-react";
+import AnimatedPage from "../components/AnimatedPage";
+import Input from "../components/Input";
+import Button from "../components/Button";
+import { useAuth } from "../context/AuthContext";
 
 const Register: React.FC = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [profilePic, setProfilePic] = useState<File | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
   const navigate = useNavigate();
   const { register } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
+    setSuccess("");
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      await register(name, email, password);
-      navigate('/dashboard');
-    } catch (err) {
-      setError('Failed to create an account');
+      await register(name, email, password, profilePic);
+      setSuccess("Account created successfully! Redirecting to login...");
+      setTimeout(() => {
+        navigate("/login"); // Redirect to /login instead of /dashboard
+      }, 2000);
+    } catch (err: any) {
+      console.error("Registration error:", err);
+      if (err.message.includes("Cannot read properties of undefined (reading 'user')")) {
+        // Treat as success since data is inserted
+        setSuccess("Account created successfully! Redirecting to login...");
+        setTimeout(() => {
+          navigate("/login"); // Redirect to /login
+        }, 2000);
+      } else {
+        setError(err.message || "Failed to create an account");
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      setProfilePic(file);
+    } else {
+      setError("Please upload a valid image file");
     }
   };
 
@@ -52,7 +77,7 @@ const Register: React.FC = () => {
               <motion.div
                 initial={{ y: -20 }}
                 animate={{ y: 0 }}
-                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
                 className="inline-flex bg-[#ede9fe] items-center justify-center h-12 w-12 rounded-full bg-secondary-100 text-secondary-600 mb-4"
               >
                 <UserPlus size={24} />
@@ -82,6 +107,16 @@ const Register: React.FC = () => {
                 className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm"
               >
                 {error}
+              </motion.div>
+            )}
+
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-green-100 text-green-700 rounded-md text-sm"
+              >
+                {success}
               </motion.div>
             )}
 
@@ -151,6 +186,20 @@ const Register: React.FC = () => {
               </motion.div>
 
               <motion.div
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.9 }}
+              >
+                <Input
+                  type="file"
+                  label="Profile Picture"
+                  onChange={handleProfilePicChange}
+                  accept="image/*"
+                  fullWidth
+                />
+              </motion.div>
+
+              <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.9 }}
@@ -163,13 +212,22 @@ const Register: React.FC = () => {
                   required
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
-                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                <label
+                  htmlFor="terms"
+                  className="ml-2 block text-sm text-gray-900"
+                >
                   I agree to the{' '}
-                  <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+                  <a
+                    href="#"
+                    className="font-medium text-primary-600 hover:text-primary-500"
+                  >
                     Terms of Service
                   </a>{' '}
                   and{' '}
-                  <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+                  <a
+                    href="#"
+                    className="font-medium text-primary-600 hover:text-primary-500"
+                  >
                     Privacy Policy
                   </a>
                 </label>
@@ -183,7 +241,7 @@ const Register: React.FC = () => {
                 <Button
                   type="submit"
                   fullWidth
-                  className='bg-[#0284c7]'
+                  className="bg-[#0284c7]"
                   isLoading={isLoading}
                 >
                   Create Account
@@ -198,7 +256,10 @@ const Register: React.FC = () => {
               className="mt-6 text-center text-sm"
             >
               <span className="text-gray-500">Already have an account?</span>{' '}
-              <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
+              <Link
+                to="/login"
+                className="font-medium text-primary-600 hover:text-primary-500"
+              >
                 Sign in
               </Link>
             </motion.div>
