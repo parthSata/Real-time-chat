@@ -12,7 +12,7 @@ const uploadInCloudinary = async (localFilePath) => {
       .catch((error) => {
         console.log(error);
       }); //Cloudinary Delete image Remaining after upload
-    // fs.unlinkSync(localFilePath); // remove the locally saved temp file after the upload operation is done
+    fs.unlinkSync(localFilePath); // remove the locally saved temp file after the upload operation is done
     return uploadResult;
   } catch (error) {
     fs.unlinkSync(localFilePath); // remove the locally saved temp file as the upload opersation got failed

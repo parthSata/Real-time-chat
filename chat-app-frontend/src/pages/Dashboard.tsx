@@ -51,6 +51,30 @@ const mockChats = [
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
     unread: 0,
   },
+  {
+    id: '6',
+    name: 'Emma Thompson',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
+    lastMessage: 'I just sent you the files you requested.',
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
+    unread: 0,
+  },
+  {
+    id: '7',
+    name: 'Emma Thompson',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
+    lastMessage: 'I just sent you the files you requested.',
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
+    unread: 0,
+  },
+  {
+    id: '8',
+    name: 'Emma Thompson',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
+    lastMessage: 'I just sent you the files you requested.',
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
+    unread: 0,
+  },
 ];
 
 const Dashboard: React.FC = () => {

@@ -6,8 +6,19 @@ import AnimatedPage from '../components/AnimatedPage';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 
+
+
+// Define the message interface
+interface Message {
+  id: string;
+  text: string;
+  sender: string;
+  timestamp: Date;
+  isMe: boolean;
+}
+
 // Mock data
-const mockContacts = {
+const mockContacts: { [key: string]: any } = {
   '1': {
     id: '1',
     name: 'Sarah Johnson',
@@ -40,7 +51,7 @@ const mockContacts = {
   },
 };
 
-const mockMessages = {
+const mockMessages: Record<string, Message[]> = {
   '1': [
     {
       id: '1-1',
@@ -153,7 +164,7 @@ const ChatRoom: React.FC = () => {
       return;
     }
 
-    if (id && mockContacts[id]) {
+    if (id && id in mockContacts) { // Use 'in' operator for type safety
       setContact(mockContacts[id]);
       setMessages(mockMessages[id] || []);
     } else {

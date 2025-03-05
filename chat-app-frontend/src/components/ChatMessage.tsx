@@ -34,9 +34,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             variants={messageVariants}
             initial="initial"
             animate="animate"
-            className={`chat-bubble ${message.isMe ? 'sent' : 'received'}`}
+            className={`chat-bubble ${message.isMe ? 'sent ' : 'received'}`}
         >
-            <div className="text-sm">{message.text}</div>
+            <div className="text-md">{message.text}</div>
             <div className="text-xs mt-1 opacity-70">
                 {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
