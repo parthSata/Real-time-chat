@@ -235,7 +235,7 @@ const ChatRoom: React.FC = () => {
 
   return (
     <AnimatedPage>
-      <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+      <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
         <header className="bg-white dark:bg-gray-800 shadow-sm">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center">

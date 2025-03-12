@@ -1,6 +1,10 @@
 import express from "express";
-import { registerUser, loginUser, logoutUser } from "../controllers/user.controller.js"; // Check this path
-import {upload} from "../middlewares/multer.middleware.js"; // Check this path
+import {
+  registerUser,
+  loginUser,
+  logoutUser,
+} from "../controllers/user.controller.js"; // Check this path
+import { upload } from "../middlewares/multer.middleware.js"; // Check this path
 const router = express.Router();
 
 router

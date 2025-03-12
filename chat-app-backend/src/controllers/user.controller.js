@@ -2,9 +2,10 @@
 import { User } from "../models/user.model.js";
 import bcrypt from "bcrypt";
 import { uploadInCloudinary } from "../utils/cloudinary.js"; // Adjust the path to your cloudinary file
-
-
-
+import { asyncHandler } from "../utils/asyncHandler.js";
+import jwt from "jsonwebtoken";
+import { ApiError } from "../utils/ApiError.js";
+import ApiResponse from "../utils/ApiResponse.js";
 
 const registerUser = async (req, res) => {
   try {
@@ -149,7 +150,6 @@ const loginUser = async (req, res) => {
     });
   }
 };
-
 // New logoutUser function
 const logoutUser = async (req, res) => {
   try {
