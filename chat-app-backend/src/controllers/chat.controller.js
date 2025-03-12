@@ -16,9 +16,7 @@ class ChatController {
     const currentUser = req.user;
 
     const recipient = await User.findOne({ username });
-    if (!recipient) {
-      throw new ApiError(404, "User not found");
-    }
+    if (!recipient) throw new ApiError(404, "User not found");
 
     if (recipient._id.toString() === currentUser._id.toString()) {
       throw new ApiError(400, "Cannot create chat with yourself");

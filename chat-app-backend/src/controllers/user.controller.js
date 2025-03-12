@@ -69,7 +69,7 @@ const registerUser = async (req, res) => {
     const token = newUser.generateAccessToken();
 
     // Set cookie (optional)
-    res.cookie("token", token, {
+    res.cookie("accessToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
@@ -97,64 +97,107 @@ const registerUser = async (req, res) => {
   }
 };
 
-const loginUser = async (req, res) => {
-  // Your existing loginUser function (unchanged for now)
-  try {
-    const { email, password } = req.body;
+const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
-    }
-
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    const isMatch = await user.isPasswordCorrect(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    user.isOnline = true;
-    user.lastSeen = new Date();
-    await user.save();
-
-    const token = user.generateAccessToken();
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    res.status(200).json({
-      message: "Login successful",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        profilePic: user.profilePic,
-        status: user.status,
-        isOnline: user.isOnline,
-      },
-      token,
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({
-      message: "Internal Server Error",
-      error: error.message,
-    });
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
   }
-};
+
+  const user = await User.findOne({ email }).select("+password");
+  if (!user) {
+    throw new ApiError(401, "Invalid email or password");
+  }
+
+  const isMatch = await user.isPasswordCorrect(password);
+  if (!isMatch) {
+    throw new ApiError(401, "Invalid email or password");
+  }
+
+  user.isOnline = true;
+  user.lastSeen = new Date();
+  await user.save();
+
+  const accessToken = user.generateAccessToken();
+
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  };
+
+  const loggedInUser = {
+    id: user._id,
+    username: user.username,
+    email: user.email,
+    profilePic: user.profilePic,
+    status: user.status,
+    isOnline: user.isOnline,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options) // Changed from "token" to "accessToken"
+    .json(new ApiResponse(200, { user: loggedInUser, accessToken }, "Login successful"));
+});
+
+// const loginUser = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     if (!email || !password) {
+//       return res
+//         .status(400)
+//         .json({ message: "Email and password are required" });
+//     }
+
+//     const user = await User.findOne({ email }).select("+password");
+//     if (!user) {
+//       return res.status(401).json({ message: "Invalid email or password" });
+//     }
+
+//     const isMatch = await user.isPasswordCorrect(password);
+//     if (!isMatch) {
+//       return res.status(401).json({ message: "Invalid email or password" });
+//     }
+
+//     user.isOnline = true;
+//     user.lastSeen = new Date();
+//     await user.save();
+
+//     const token = user.generateAccessToken();
+
+//     res.cookie("accessToken", token, {
+//       httpOnly: true,
+//       secure: process.env.NODE_ENV === "production",
+//       sameSite: "strict",
+//     });
+
+//     res.status(200).json({
+//       message: "Login successful",
+//       user: {
+//         id: user._id,
+//         username: user.username,
+//         email: user.email,
+//         profilePic: user.profilePic,
+//         status: user.status,
+//         isOnline: user.isOnline,
+//       },
+//       token,
+//     });
+//   } catch (error) {
+//     console.error("Login error:", error);
+//     res.status(500).json({
+//       message: "Internal Server Error",
+//       error: error.message,
+//     });
+//   }
+// };
 // New logoutUser function
 const logoutUser = async (req, res) => {
   try {
     // Clear the token cookie
-    res.clearCookie("token", {
+    res.clearCookie("accessToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",

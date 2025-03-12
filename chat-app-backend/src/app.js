@@ -23,7 +23,6 @@ const chatController = initializeChatSocket(io);
 if (!chatController || typeof chatController.createChat !== "function") {
   throw new Error("chatController is not properly initialized");
 }
-app.use("/api/v1/chats", initializeChatRoutes(chatController));
 
 app.use(
   cors({
@@ -57,5 +56,7 @@ app.use((err, req, res, next) => {
 });
 
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/chats", initializeChatRoutes(chatController));
+
 
 export { app, server };
