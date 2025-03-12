@@ -8,8 +8,8 @@ const initializeChatRoutes = (chatController) => {
   router.post("/create", verifyJWT, (req, res) =>
     chatController.createChat(req, res)
   );
-  router.post("/message", verifyJWT, (req, res) =>
-    chatController.sendMessage(req, res)
+  router.post("/message", verifyJWT, (req, res, next) =>
+    chatController.sendMessage(req, res, next)
   );
   router.get("/my-chats", verifyJWT, (req, res) =>
     chatController.getUserChats(req, res)
