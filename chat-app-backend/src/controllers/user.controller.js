@@ -138,7 +138,13 @@ const loginUser = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .cookie("accessToken", accessToken, options) // Changed from "token" to "accessToken"
-    .json(new ApiResponse(200, { user: loggedInUser, accessToken }, "Login successful"));
+    .json(
+      new ApiResponse(
+        200,
+        { user: loggedInUser, accessToken },
+        "Login successful"
+      )
+    );
 });
 
 // const loginUser = async (req, res) => {
@@ -194,6 +200,7 @@ const loginUser = asyncHandler(async (req, res) => {
 //   }
 // };
 // New logoutUser function
+
 const logoutUser = async (req, res) => {
   try {
     // Clear the token cookie
@@ -225,4 +232,29 @@ const logoutUser = async (req, res) => {
   }
 };
 
-export { registerUser, loginUser, logoutUser };
+const getCurrentUser = asyncHandler(async (req, res) => {
+  const userId = req.user?.id; // Set by verifyJWT middleware
+  if (!userId) throw new ApiError(401, "Unauthorized");
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(404, "User not found");
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          profilePic: user.profilePic,
+          status: user.status,
+          isOnline: user.isOnline,
+        },
+      },
+      "User fetched successfully"
+    )
+  );
+});
+
+export { registerUser, loginUser, getCurrentUser, logoutUser };

@@ -1,4 +1,3 @@
-// src/components/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -10,82 +9,114 @@ import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../context/AuthContext';
 
-// Mock data (replace with API call later)
-const mockChats = [
-  {
-    id: '1',
-    name: 'Sarah Johnson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    lastMessage: 'Hey, how are you doing today?',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    unread: 2,
-  },
-  {
-    id: '2',
-    name: 'Michael Chen',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
-    lastMessage: 'Did you see the latest project update?',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    unread: 0,
-  },
-  {
-    id: '3',
-    name: 'Jessica Williams',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica',
-    lastMessage: "Let's meet for coffee tomorrow!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    unread: 1,
-  },
-  {
-    id: '4',
-    name: 'David Rodriguez',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-    lastMessage: 'Thanks for your help with the presentation.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    unread: 0,
-  },
-  {
-    id: '5',
-    name: 'Emma Thompson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    lastMessage: 'I just sent you the files you requested.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    unread: 0,
-  },
-];
+// Define User interface based on backend response
+// interface User {
+//   id: string;
+//   username: string;
+//   email?: string;
+//   profilePic?: string;
+//   status?: string;
+//   isOnline?: boolean;
+// }
+
+// Define Chat interface based on backend response
+interface Chat {
+  _id: string;
+  participants: { _id: string; username: string }[];
+  lastMessage?: string;
+  updatedAt: string;
+  unread?: number;
+}
 
 const Dashboard: React.FC = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredChats, setFilteredChats] = useState(mockChats);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [filteredChats, setFilteredChats] = useState<Chat[]>([]);
   const { user, isAuthenticated, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect only after loading is complete and session is invalid
+  // Fetch chats on mount
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      fetchChats();
+    }
+  }, [loading, isAuthenticated]);
+
+  // Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       navigate('/login');
     }
   }, [isAuthenticated, loading, navigate]);
 
-  // Filter chats based on search query
+  // Filter chats or handle user search
   useEffect(() => {
     if (searchQuery.trim() === '') {
-      setFilteredChats(mockChats);
+      setFilteredChats(chats);
     } else {
       const query = searchQuery.toLowerCase();
-      setFilteredChats(
-        mockChats.filter(
-          (chat) =>
-            chat.name.toLowerCase().includes(query) ||
-            chat.lastMessage.toLowerCase().includes(query)
-        )
-      );
+      const filtered = chats.filter((chat) => {
+        const otherParticipant = chat.participants.find(
+          (p) => p._id !== user?.id
+        );
+        return (
+          otherParticipant?.username.toLowerCase().includes(query) ||
+          (chat.lastMessage && chat.lastMessage.toLowerCase().includes(query))
+        );
+      });
+      setFilteredChats(filtered);
     }
-  }, [searchQuery]);
+  }, [searchQuery, chats, user]);
+
+  // Fetch chats from backend
+  const fetchChats = async (): Promise<void> => {
+    try {
+      const response = await fetch('http://localhost:3000/api/v1/chats/my-chats', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const data: { success: boolean; data: Chat[]; message?: string } = await response.json();
+      if (data.success) {
+        setChats(data.data);
+        setFilteredChats(data.data);
+      } else {
+        console.error('Failed to fetch chats:', data.message);
+      }
+    } catch (err) {
+      console.error('Error fetching chats:', err);
+    }
+  };
+
+  // Create a new chat
+  const handleCreateChat = async (username?: string): Promise<void> => {
+    try {
+      const targetUsername = username || searchQuery.trim();
+      if (!targetUsername) {
+        alert('Please enter a username to start a chat');
+        return;
+      }
+      const response = await fetch('http://localhost:3000/api/v1/chats/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: targetUsername }),
+      });
+      const data: { success: boolean; data: Chat; message?: string } = await response.json();
+      if (data.success) {
+        setChats((prev) => [data.data, ...prev]);
+        setSearchQuery('');
+        navigate(`/chat/${data.data._id}`);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error creating chat:', err);
+    }
+  };
 
   // Handle logout
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     try {
       await logout();
       navigate('/login');
@@ -94,7 +125,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Show loading state while session is being validated
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#111827]">
@@ -134,7 +164,9 @@ const Dashboard: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => handleCreateChat()}
                   className="p-2 rounded-full bg-[#0284c7] text-primary-foreground shadow-md"
+                  title="Create New Chat"
                 >
                   <Plus size={20} className="text-white" />
                 </motion.button>
@@ -156,9 +188,9 @@ const Dashboard: React.FC = () => {
                 </div>
                 <Input
                   type="text"
-                  placeholder="Search conversations..."
+                  placeholder="Search conversations or users..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-white placeholder:text-[#111827] text-[#111827] border border-input dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
                   fullWidth
                 />
@@ -169,7 +201,7 @@ const Dashboard: React.FC = () => {
           <main className="p-4 flex-1">
             {user && (
               <div className="mb-4 text-white">
-                Welcome, {user.name}!
+                Welcome, {user.username}!
               </div>
             )}
             {filteredChats.length > 0 ? (
@@ -180,10 +212,21 @@ const Dashboard: React.FC = () => {
                 animate={{ opacity: 1 }}
                 className="text-center py-10"
               >
-                <p className="text-muted-foreground dark:text-gray-400">No conversations found</p>
-                <Button variant="primary" size="sm" className="mt-4">
-                  Start a new chat
-                </Button>
+                <p className="text-muted-foreground dark:text-gray-400">
+                  {searchQuery.trim()
+                    ? 'No matching conversations found'
+                    : 'No conversations yet'}
+                </p>
+                {searchQuery.trim() && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => handleCreateChat(searchQuery)}
+                  >
+                    Start a new chat with {searchQuery}
+                  </Button>
+                )}
               </motion.div>
             )}
           </main>

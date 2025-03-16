@@ -13,5 +13,8 @@ router
 
 router.route("/login").post(loginUser);
 router.route("/logout").post(logoutUser);
-
+// routes/user.routes.js
+router.get("/me", verifyJWT, (req, res) =>
+  res.status(200).json(new ApiResponse(200, req.user, "User fetched successfully"))
+);
 export default router;
