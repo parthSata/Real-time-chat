@@ -8,6 +8,11 @@ import initializeChatSocket from "./controllers/chat.controller.js";
 import userRouter from "./routes/user.routes.js";
 import initializeChatRoutes from "./routes/chat.routes.js";
 import { ApiError } from "./utils/ApiError.js";
+import {
+  setupBothOnlineSocket,
+  setupChatSocket,
+  setupOnlineSocket,
+} from "./sockets/index.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -19,7 +24,16 @@ const io = new Server(server, {
   },
 });
 
-const chatController = initializeChatSocket(io);
+// Initialize online users map
+const onlineUsers = new Map();
+
+// Set up additional socket functionalities
+setupOnlineSocket(io, onlineUsers);
+setupChatSocket(io, onlineUsers);
+setupBothOnlineSocket(io, onlineUsers);
+
+// Initialize chat controller with Socket.IO and onlineUsers
+const chatController = initializeChatSocket(io, onlineUsers);
 if (!chatController || typeof chatController.createChat !== "function") {
   throw new Error("chatController is not properly initialized");
 }
@@ -38,6 +52,11 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+// Routes
+app.use("/api/v1/users", userRouter);
+app.use("/api/v1/chats", initializeChatRoutes(chatController));
+
+// Error handling middleware
 app.use((err, req, res, next) => {
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
@@ -54,9 +73,5 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
 });
-
-app.use("/api/v1/users", userRouter);
-app.use("/api/v1/chats", initializeChatRoutes(chatController));
-
 
 export { app, server };

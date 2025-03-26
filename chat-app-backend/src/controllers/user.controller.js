@@ -1,7 +1,6 @@
-// controllers/user.controller.js
 import { User } from "../models/user.model.js";
 import bcrypt from "bcrypt";
-import { uploadInCloudinary } from "../utils/cloudinary.js"; // Adjust the path to your cloudinary file
+import { uploadInCloudinary } from "../utils/cloudinary.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import jwt from "jsonwebtoken";
 import { ApiError } from "../utils/ApiError.js";
@@ -9,17 +8,14 @@ import ApiResponse from "../utils/ApiResponse.js";
 
 const registerUser = async (req, res) => {
   try {
-    // Extract form-data fields from req.body (text fields)
     const { username, email, password, status, isOnline, lastSeen } = req.body;
 
-    // Validation: Ensure required fields are provided and not empty
     if (!username?.trim() || !email?.trim() || !password?.trim()) {
       return res
         .status(400)
         .json({ message: "Username, email, and password are required" });
     }
 
-    // Check if user already exists (by email or username)
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       return res.status(400).json({
@@ -30,52 +26,43 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Prepare user data
     const userData = {
       username: username.trim(),
       email: email.trim(),
       password: hashedPassword,
     };
 
-    // Handle profilePic file upload (if provided) from req.files, not req.body
     if (req.files && req.files.profilePic) {
-      const profilePicFile = req.files.profilePic[0]; // Get the first file (multer stores files in req.files)
-      const uploadResult = await uploadInCloudinary(profilePicFile.path); // Upload to Cloudinary
-
+      const profilePicFile = req.files.profilePic[0];
+      const uploadResult = await uploadInCloudinary(profilePicFile.path);
       if (uploadResult) {
-        userData.profilePic = uploadResult.secure_url; // Store the Cloudinary URL
+        userData.profilePic = uploadResult.secure_url;
       } else {
         return res
           .status(400)
           .json({ message: "Failed to upload profile picture to Cloudinary" });
       }
     } else {
-      userData.profilePic = ""; // Default to empty string if no file is uploaded
+      userData.profilePic = "";
     }
 
-    // Add optional fields if provided
     if (status) userData.status = status;
-    if (isOnline) userData.isOnline = isOnline === "true"; // Convert string to boolean
-    if (lastSeen) userData.lastSeen = new Date(lastSeen); // Convert to Date if provided
+    if (isOnline) userData.isOnline = isOnline === "true";
+    if (lastSeen) userData.lastSeen = new Date(lastSeen);
 
-    // Create new user
     const newUser = new User(userData);
     await newUser.save();
 
-    // Generate access token
     const token = newUser.generateAccessToken();
 
-    // Set cookie (optional)
     res.cookie("accessToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
     });
 
-    // Send response
     res.status(201).json({
       message: "User registered successfully",
       user: {
@@ -137,7 +124,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .cookie("accessToken", accessToken, options) // Changed from "token" to "accessToken"
+    .cookie("accessToken", accessToken, options)
     .json(
       new ApiResponse(
         200,
@@ -147,71 +134,15 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-// const loginUser = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     if (!email || !password) {
-//       return res
-//         .status(400)
-//         .json({ message: "Email and password are required" });
-//     }
-
-//     const user = await User.findOne({ email }).select("+password");
-//     if (!user) {
-//       return res.status(401).json({ message: "Invalid email or password" });
-//     }
-
-//     const isMatch = await user.isPasswordCorrect(password);
-//     if (!isMatch) {
-//       return res.status(401).json({ message: "Invalid email or password" });
-//     }
-
-//     user.isOnline = true;
-//     user.lastSeen = new Date();
-//     await user.save();
-
-//     const token = user.generateAccessToken();
-
-//     res.cookie("accessToken", token, {
-//       httpOnly: true,
-//       secure: process.env.NODE_ENV === "production",
-//       sameSite: "strict",
-//     });
-
-//     res.status(200).json({
-//       message: "Login successful",
-//       user: {
-//         id: user._id,
-//         username: user.username,
-//         email: user.email,
-//         profilePic: user.profilePic,
-//         status: user.status,
-//         isOnline: user.isOnline,
-//       },
-//       token,
-//     });
-//   } catch (error) {
-//     console.error("Login error:", error);
-//     res.status(500).json({
-//       message: "Internal Server Error",
-//       error: error.message,
-//     });
-//   }
-// };
-// New logoutUser function
-
 const logoutUser = async (req, res) => {
   try {
-    // Clear the token cookie
     res.clearCookie("accessToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
     });
 
-    // Optionally, update the user's online status to false
-    const userId = req.user?.id; // Assuming you have middleware to decode the JWT and attach user to req.user
+    const userId = req.user?.id;
     if (userId) {
       const user = await User.findById(userId);
       if (user) {
@@ -221,7 +152,6 @@ const logoutUser = async (req, res) => {
       }
     }
 
-    // Send success response
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     console.error("Logout error:", error);
@@ -233,7 +163,7 @@ const logoutUser = async (req, res) => {
 };
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const userId = req.user?.id; // Set by verifyJWT middleware
+  const userId = req.user?.id;
   if (!userId) throw new ApiError(401, "Unauthorized");
 
   const user = await User.findById(userId);
@@ -257,4 +187,4 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   );
 });
 
-export { registerUser, loginUser, getCurrentUser, logoutUser };
+export { registerUser, loginUser, logoutUser, getCurrentUser };
