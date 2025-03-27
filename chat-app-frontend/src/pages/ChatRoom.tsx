@@ -1,162 +1,45 @@
+// ChatRoom.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Phone, Video } from 'lucide-react';
+import io from 'socket.io-client';
 import AnimatedPage from '../components/AnimatedPage';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 
+const API_BASE_URL = 'http://localhost:3000';
 
-
-// Define the message interface
-interface Message {
-  id: string;
-  text: string;
-  sender: string;
-  timestamp: Date;
-  isMe: boolean;
+interface Participant {
+  _id: string;
+  username: string;
 }
 
-// Mock data
-const mockContacts: { [key: string]: any } = {
-  '1': {
-    id: '1',
-    name: 'Sarah Johnson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    status: 'online',
-  },
-  '2': {
-    id: '2',
-    name: 'Michael Chen',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
-    status: 'offline',
-  },
-  '3': {
-    id: '3',
-    name: 'Jessica Williams',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica',
-    status: 'online',
-  },
-  '4': {
-    id: '4',
-    name: 'David Rodriguez',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-    status: 'away',
-  },
-  '5': {
-    id: '5',
-    name: 'Emma Thompson',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-    status: 'online',
-  },
-};
+interface Message {
+  _id: string;
+  message: string;
+  sender: { _id: string; username: string };
+  recipient: { _id: string; username: string };
+  chatId: string;
+  timestamp: Date;
+  isRead: boolean;
+}
 
-const mockMessages: Record<string, Message[]> = {
-  '1': [
-    {
-      id: '1-1',
-      text: 'Hey, how are you doing today?',
-      sender: '1',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60),
-      isMe: false,
-    },
-    {
-      id: '1-2',
-      text: 'I\'m doing great! Just finished a big project at work.',
-      sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 55),
-      isMe: true,
-    },
-    {
-      id: '1-3',
-      text: 'That\'s awesome! Was it the one you were telling me about last week?',
-      sender: '1',
-      timestamp: new Date(Date.now() - 1000 * 60 * 50),
-      isMe: false,
-    },
-    {
-      id: '1-4',
-      text: 'Yes, exactly! It was challenging but really rewarding in the end.',
-      sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 45),
-      isMe: true,
-    },
-    {
-      id: '1-5',
-      text: 'I knew you could do it! We should celebrate this weekend.',
-      sender: '1',
-      timestamp: new Date(Date.now() - 1000 * 60 * 40),
-      isMe: false,
-    },
-  ],
-  '2': [
-    {
-      id: '2-1',
-      text: 'Did you see the latest project update?',
-      sender: '2',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30),
-      isMe: false,
-    },
-    {
-      id: '2-2',
-      text: 'Not yet, what changed?',
-      sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 25),
-      isMe: true,
-    },
-  ],
-  '3': [
-    {
-      id: '3-1',
-      text: 'Let\'s meet for coffee tomorrow!',
-      sender: '3',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-      isMe: false,
-    },
-  ],
-  '4': [
-    {
-      id: '4-1',
-      text: 'Thanks for your help with the presentation.',
-      sender: '4',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5),
-      isMe: false,
-    },
-    {
-      id: '4-2',
-      text: 'No problem at all! Happy to help anytime.',
-      sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4.9),
-      isMe: true,
-    },
-  ],
-  '5': [
-    {
-      id: '5-1',
-      text: 'I just sent you the files you requested.',
-      sender: '5',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-      isMe: false,
-    },
-    {
-      id: '5-2',
-      text: 'Got them, thank you!',
-      sender: 'me',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 23.9),
-      isMe: true,
-    },
-  ],
-};
+interface Chat {
+  _id: string;
+  participants: Participant[];
+}
 
 const ChatRoom: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
-  const [contact, setContact] = useState<any>(null);
-  const [isTyping, setIsTyping] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chat, setChat] = useState<Chat | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -164,74 +47,138 @@ const ChatRoom: React.FC = () => {
       return;
     }
 
-    if (id && id in mockContacts) { // Use 'in' operator for type safety
-      setContact(mockContacts[id]);
-      setMessages(mockMessages[id] || []);
-    } else {
+    if (!id) {
       navigate('/dashboard');
+      return;
     }
-  }, [id, isAuthenticated, navigate]);
+
+    const loadChat = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const chatData = await fetchChat(id);
+        setChat(chatData);
+
+        const messagesData = await fetchMessages(id);
+        setMessages(messagesData);
+      } catch (err) {
+        console.error('Error in loadChat:', err);
+        setError('Failed to load chat. Please try again.');
+        navigate('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadChat();
+
+    const newSocket = io(API_BASE_URL, { withCredentials: true });
+
+    if (user) {
+      newSocket.emit('join', user.id);
+    }
+
+    newSocket.on('newMessage', ({ chatId, message }: { chatId: string; message: Message }) => {
+      if (chatId === id) {
+        setMessages((prev) => [...prev, message]);
+      }
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [id, isAuthenticated, navigate, user]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  const fetchChat = async (chatId: string): Promise<Chat> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const data = await response.json();
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || 'Failed to fetch chat');
+    }
+  };
+
+  const fetchMessages = async (chatId: string): Promise<Message[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const data = await response.json();
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || 'Failed to fetch messages');
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '') return;
+    if (message.trim() === '' || !id) return;
 
-    const newMessage = {
-      id: `${id}-${messages.length + 1}`,
-      text: message,
-      sender: 'me',
-      timestamp: new Date(),
-      isMe: true,
-    };
-
-    setMessages([...messages, newMessage]);
-    setMessage('');
-
-    // Simulate response
-    setTimeout(() => {
-      setIsTyping(true);
-      
-      setTimeout(() => {
-        setIsTyping(false);
-        
-        const responseMessage = {
-          id: `${id}-${messages.length + 2}`,
-          text: getRandomResponse(),
-          sender: id || '',
-          timestamp: new Date(),
-          isMe: false,
-        };
-        
-        setMessages(prev => [...prev, responseMessage]);
-      }, 2000);
-    }, 1000);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ chatId: id, content: message }),
+      });
+      if (!response.ok) throw new Error('Failed to send message');
+      const data = await response.json();
+      if (data.success) {
+        setMessage('');
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setError('Failed to send message. Please try again.');
+    }
   };
 
-  const getRandomResponse = () => {
-    const responses = [
-      "That's interesting!",
-      "I see what you mean.",
-      "Thanks for sharing that.",
-      "I'll think about it and get back to you.",
-      "Good point!",
-      "I agree with you.",
-      "Let me check and confirm.",
-      "That sounds like a plan!",
-      "I appreciate your perspective.",
-      "Let's discuss this further soon.",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
-  };
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <p className="text-white">Loading chat...</p>
+      </div>
+    );
+  }
 
-  if (!contact) return null;
+  if (error) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  if (!chat || !user) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <p className="text-white">Chat or user not found. Redirecting...</p>
+      </div>
+    );
+  }
+
+  const otherParticipant = chat.participants.find((p) => p._id !== user.id);
+
+  if (!otherParticipant) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <p className="text-white">No other participant found in this chat.</p>
+      </div>
+    );
+  }
 
   return (
     <AnimatedPage>
@@ -247,21 +194,15 @@ const ChatRoom: React.FC = () => {
               </button>
               <div className="ml-3 flex items-center">
                 <img
-                  src={contact.avatar}
-                  alt={contact.name}
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`}
+                  alt={otherParticipant.username}
                   className="w-10 h-10 rounded-full"
                 />
                 <div className="ml-3">
-                  <h2 className="text-lg font-medium text-gray-800 dark:text-white">{contact.name}</h2>
+                  <h2 className="text-lg font-medium text-gray-800 dark:text-white">{otherParticipant.username}</h2>
                   <div className="flex items-center">
-                    <span className={`h-2 w-2 rounded-full ${
-                      contact.status === 'online' ? 'bg-green-500' : 
-                      contact.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
-                    }`}></span>
-                    <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                      {contact.status === 'online' ? 'Online' : 
-                       contact.status === 'away' ? 'Away' : 'Offline'}
-                    </span>
+                    <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                    <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">Online</span>
                   </div>
                 </div>
               </div>
@@ -297,23 +238,17 @@ const ChatRoom: React.FC = () => {
             <div className="space-y-1">
               <AnimatePresence>
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} />
+                  <ChatMessage
+                    key={msg._id}
+                    message={{
+                      id: msg._id,
+                      text: msg.message,
+                      sender: msg.sender._id,
+                      timestamp: new Date(msg.timestamp),
+                      isMe: msg.sender._id === user.id,
+                    }}
+                  />
                 ))}
-                {isTyping && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="chat-bubble received"
-                    style={{ maxWidth: '60px' }}
-                  >
-                    <div className="typing-indicator">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </motion.div>
-                )}
               </AnimatePresence>
               <div ref={messagesEndRef} />
             </div>

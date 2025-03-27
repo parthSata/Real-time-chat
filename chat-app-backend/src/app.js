@@ -4,15 +4,10 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import http from "http";
 import { Server } from "socket.io";
-import initializeChatSocket from "./controllers/chat.controller.js";
 import userRouter from "./routes/user.routes.js";
 import initializeChatRoutes from "./routes/chat.routes.js";
+import initializeChatSocket from "./controllers/chat.controller.js";
 import { ApiError } from "./utils/ApiError.js";
-import {
-  setupBothOnlineSocket,
-  setupChatSocket,
-  setupOnlineSocket,
-} from "./sockets/index.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -27,17 +22,10 @@ const io = new Server(server, {
 // Initialize online users map
 const onlineUsers = new Map();
 
-// Set up additional socket functionalities
-setupOnlineSocket(io, onlineUsers);
-setupChatSocket(io, onlineUsers);
-setupBothOnlineSocket(io, onlineUsers);
-
 // Initialize chat controller with Socket.IO and onlineUsers
 const chatController = initializeChatSocket(io, onlineUsers);
-if (!chatController || typeof chatController.createChat !== "function") {
-  throw new Error("chatController is not properly initialized");
-}
 
+// Middleware
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -74,4 +62,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-export { app, server };
+export { app, server, io };

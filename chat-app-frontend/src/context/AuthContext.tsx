@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+// src/context/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import axios from 'axios';
 
 interface User {
   id: string;
   username: string;
-  email?: string;
+  email: string;
   profilePic?: string;
   status?: string;
   isOnline?: boolean;
@@ -14,95 +16,156 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, profilePic?: File) => Promise<void>;
   logout: () => Promise<void>;
+  checkSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await fetch('http://localhost:3000/api/v1/users/me', {
-          credentials: 'include',
-        });
-        const data: { success: boolean; data: User; message?: string } = await response.json();
-        if (data.success) {
-          setUser(data.data);
-          setIsAuthenticated(true);
-        }
-      } catch (err) {
-        console.error('Session check failed:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkSession();
-  }, []);
-
   const checkSession = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/users/me', {
-        credentials: 'include',
+      const response = await axios.get('http://localhost:3000/api/v1/users/me', {
+        withCredentials: true,
       });
-      const data = await response.json();
-      if (data.success) {
-        setUser(data.data);
+      if (response.data.success) {
+        setUser(response.data.data.user);
         setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
       }
-    } catch (err) {
-      console.error('Session check failed:', err);
+    } catch (error: any) {
+      console.error('Session check failed:', error.message);
+      if (error.code === 'ERR_NETWORK') {
+        console.error('Cannot connect to the backend server. Please ensure the server is running on http://localhost:3000.');
+      }
+      if (error.response?.status === 401) {
+        try {
+          await axios.post('http://localhost:3000/api/v1/users/refresh-token', {}, { withCredentials: true });
+          const retryResponse = await axios.get('http://localhost:3000/api/v1/users/me', {
+            withCredentials: true,
+          });
+          if (retryResponse.data.success) {
+            setUser(retryResponse.data.data.user);
+            setIsAuthenticated(true);
+          }
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (email: string, password: string): Promise<void> => {
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const login = async (email: string, password: string) => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/users/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
-      });
-      const data: { success: boolean; data: { user: User }; message?: string } = await response.json();
-      if (data.success) {
-        setUser(data.data.user);
+      const response = await axios.post(
+        'http://localhost:3000/api/v1/users/login',
+        { email, password },
+        { withCredentials: true }
+      );
+      if (response.data.success) {
+        setUser(response.data.data.user);
         setIsAuthenticated(true);
       } else {
-        throw new Error(data.message || 'Login failed');
+        throw new Error('Login failed');
       }
-    } catch (err) {
-      throw err;
+    } catch (error: any) {
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to the backend server. Please ensure the server is running on http://localhost:3000.');
+      }
+      if (error.response?.status === 401) {
+        throw new Error('Invalid email or password. Please check your credentials and try again.');
+      }
+      throw new Error(error.response?.data?.message || 'An error occurred during login.');
     }
   };
 
-  const logout = async (): Promise<void> => {
+  const register = async (username: string, email: string, password: string, profilePic?: File) => {
     try {
-      await fetch('http://localhost:3000/api/v1/users/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const formData = new FormData();
+      formData.append('username', username);
+      formData.append('email', email);
+      formData.append('password', password);
+      if (profilePic) {
+        formData.append('profilePic', profilePic);
+      }
+
+      console.log(`Sending registration request for email: ${email}`);
+      const response = await axios.post(
+        'http://localhost:3000/api/v1/users/register',
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          withCredentials: true,
+        }
+      );
+
+      console.log('Registration response:', response.data);
+      if (response.data.success) {
+        setUser(response.data.data.user);
+        setIsAuthenticated(true);
+      } else {
+        throw new Error('Registration failed');
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to the backend server. Please ensure the server is running on http://localhost:3000.');
+      }
+      throw new Error(error.response?.data?.message || 'Something went wrong during registration!');
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await axios.post('http://localhost:3000/api/v1/users/logout', {}, { withCredentials: true });
       setUser(null);
       setIsAuthenticated(false);
-    } catch (err) {
-      console.error('Logout error:', err);
+    } catch (error: any) {
+      console.error('Logout failed:', error.message);
+      if (error.code === 'ERR_NETWORK') {
+        throw new Error('Cannot connect to the backend server. Please ensure the server is running on http://localhost:3000.');
+      }
+      throw new Error(error.response?.data?.message || 'Logout failed');
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isAuthenticated, loading, login, register, logout, checkSession }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
-};
+export default AuthProvider;

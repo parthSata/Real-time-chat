@@ -1,54 +1,67 @@
-// src/components/Register.tsx
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { UserPlus } from "lucide-react";
-import AnimatedPage from "../components/AnimatedPage";
-import Input from "../components/Input";
-import Button from "../components/Button";
-import { useAuth } from "../context/AuthContext";
+// src/pages/Register.tsx
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { UserPlus } from 'lucide-react';
+import AnimatedPage from '../components/AnimatedPage';
+import Input from '../components/Input';
+import Button from '../components/Button';
+import { useAuth } from '../context/AuthContext';
 
 const Register: React.FC = () => {
-  const [name, setName] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [name, setName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [profilePic, setProfilePic] = useState<File | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
-  const [success, setSuccess] = useState<string>("");
+  const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const navigate = useNavigate();
   const { register } = useAuth();
 
+  const validateForm = (): boolean => {
+    if (name.length < 3) {
+      setError('Username must be at least 3 characters long');
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return false;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setError('');
+    setSuccess('');
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
 
     try {
+      // Call the register function from AuthContext
       await register(name, email, password, profilePic);
-      setSuccess("Account created successfully! Redirecting to login...");
+      setSuccess('Account created successfully! Redirecting to login...');
       setTimeout(() => {
-        navigate("/login"); // Redirect to /login instead of /dashboard
+        navigate('/login');
       }, 2000);
     } catch (err: any) {
-      console.error("Registration error:", err);
-      if (err.message.includes("Cannot read properties of undefined (reading 'user')")) {
-        // Treat as success since data is inserted
-        setSuccess("Account created successfully! Redirecting to login...");
-        setTimeout(() => {
-          navigate("/login"); // Redirect to /login
-        }, 2000);
-      } else {
-        setError(err.message || "Failed to create an account");
-      }
+      console.error('Registration error:', err);
+      setError(err.message || 'Failed to create an account');
     } finally {
       setIsLoading(false);
     }
@@ -56,10 +69,10 @@ const Register: React.FC = () => {
 
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
+    if (file && file.type.startsWith('image/')) {
       setProfilePic(file);
     } else {
-      setError("Please upload a valid image file");
+      setError('Please upload a valid image file');
     }
   };
 
@@ -77,7 +90,7 @@ const Register: React.FC = () => {
               <motion.div
                 initial={{ y: -20 }}
                 animate={{ y: 0 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
                 className="inline-flex bg-[#ede9fe] items-center justify-center h-12 w-12 rounded-full bg-secondary-100 text-secondary-600 mb-4"
               >
                 <UserPlus size={24} />
@@ -134,6 +147,7 @@ const Register: React.FC = () => {
                   placeholder="Enter your full name"
                   required
                   fullWidth
+                  disabled={isLoading}
                 />
               </motion.div>
 
@@ -150,6 +164,7 @@ const Register: React.FC = () => {
                   placeholder="Enter your email"
                   required
                   fullWidth
+                  disabled={isLoading}
                 />
               </motion.div>
 
@@ -166,6 +181,7 @@ const Register: React.FC = () => {
                   placeholder="Create a password"
                   required
                   fullWidth
+                  disabled={isLoading}
                 />
               </motion.div>
 
@@ -182,6 +198,7 @@ const Register: React.FC = () => {
                   placeholder="Confirm your password"
                   required
                   fullWidth
+                  disabled={isLoading}
                 />
               </motion.div>
 
@@ -196,6 +213,7 @@ const Register: React.FC = () => {
                   onChange={handleProfilePicChange}
                   accept="image/*"
                   fullWidth
+                  disabled={isLoading}
                 />
               </motion.div>
 
@@ -211,23 +229,15 @@ const Register: React.FC = () => {
                   type="checkbox"
                   required
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  disabled={isLoading}
                 />
-                <label
-                  htmlFor="terms"
-                  className="ml-2 block text-sm text-gray-900"
-                >
+                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
                   I agree to the{' '}
-                  <a
-                    href="#"
-                    className="font-medium text-primary-600 hover:text-primary-500"
-                  >
+                  <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
                     Terms of Service
                   </a>{' '}
                   and{' '}
-                  <a
-                    href="#"
-                    className="font-medium text-primary-600 hover:text-primary-500"
-                  >
+                  <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
                     Privacy Policy
                   </a>
                 </label>
@@ -243,6 +253,7 @@ const Register: React.FC = () => {
                   fullWidth
                   className="bg-[#0284c7]"
                   isLoading={isLoading}
+                  disabled={isLoading}
                 >
                   Create Account
                 </Button>

@@ -1,7 +1,9 @@
+// src/pages/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Menu, Search, Plus, LogOut } from 'lucide-react';
+import io from 'socket.io-client';
 import AnimatedPage from '../components/AnimatedPage';
 import ChatList from '../components/ChatList';
 import Sidebar from '../components/Sidebar';
@@ -9,17 +11,17 @@ import Input from '../components/Input';
 import Button from '../components/Button';
 import { useAuth } from '../context/AuthContext';
 
-// Define User interface based on backend response
-// interface User {
-//   id: string;
-//   username: string;
-//   email?: string;
-//   profilePic?: string;
-//   status?: string;
-//   isOnline?: boolean;
-// }
+const API_BASE_URL = 'http://localhost:3000';
 
-// Define Chat interface based on backend response
+interface User {
+  id: string;
+  username: string;
+  email?: string;
+  profilePic?: string;
+  status?: string;
+  isOnline?: boolean;
+}
+
 interface Chat {
   _id: string;
   participants: { _id: string; username: string }[];
@@ -33,53 +35,82 @@ const Dashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [chats, setChats] = useState<Chat[]>([]);
   const [filteredChats, setFilteredChats] = useState<Chat[]>([]);
+  const [searchedUser, setSearchedUser] = useState<User | null>(null);
+  const [error, setError] = useState<string>('');
   const { user, isAuthenticated, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Fetch chats on mount
+  const currentUser: User | null = user;
+
   useEffect(() => {
     if (!loading && isAuthenticated) {
       fetchChats();
     }
   }, [loading, isAuthenticated]);
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       navigate('/login');
     }
   }, [isAuthenticated, loading, navigate]);
 
-  // Filter chats or handle user search
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredChats(chats);
+      setSearchedUser(null);
+      setError('');
     } else {
       const query = searchQuery.toLowerCase();
       const filtered = chats.filter((chat) => {
-        const otherParticipant = chat.participants.find(
-          (p) => p._id !== user?.id
-        );
+        const otherParticipant = chat.participants.find((p) => p._id !== currentUser?.id);
         return (
           otherParticipant?.username.toLowerCase().includes(query) ||
           (chat.lastMessage && chat.lastMessage.toLowerCase().includes(query))
         );
       });
       setFilteredChats(filtered);
+      searchUser(query);
     }
-  }, [searchQuery, chats, user]);
+  }, [searchQuery, chats, currentUser]);
 
-  // Fetch chats from backend
+  useEffect(() => {
+    const newSocket = io(API_BASE_URL, { withCredentials: true });
+
+    if (user) {
+      newSocket.emit('join', user.id);
+    }
+
+    newSocket.on('newChat', (chat: Chat) => {
+      console.log('Received new chat:', chat);
+      setChats((prev) => {
+        // Prevent duplicates by checking if the chat already exists
+        if (prev.some((existingChat) => existingChat._id === chat._id)) {
+          return prev;
+        }
+        return [chat, ...prev];
+      });
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [user]);
+
   const fetchChats = async (): Promise<void> => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/chats/my-chats', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/my-chats`, {
         method: 'GET',
         credentials: 'include',
       });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const data: { success: boolean; data: Chat[]; message?: string } = await response.json();
       if (data.success) {
-        setChats(data.data);
-        setFilteredChats(data.data);
+        // Remove duplicates from the fetched chats
+        const uniqueChats = Array.from(
+          new Map(data.data.map((chat) => [chat._id, chat])).values()
+        );
+        setChats(uniqueChats);
+        setFilteredChats(uniqueChats);
       } else {
         console.error('Failed to fetch chats:', data.message);
       }
@@ -88,7 +119,33 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Create a new chat
+  const searchUser = async (username: string): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/users/search?username=${username}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+      }
+
+      const data: { success: boolean; data: User; message?: string } = await response.json();
+      if (data.success) {
+        setSearchedUser(data.data);
+        setError('');
+      } else {
+        setSearchedUser(null);
+        setError(data.message || 'User not found');
+      }
+    } catch (err: any) {
+      console.error('Search user error:', err.message);
+      setSearchedUser(null);
+      setError(err.message || 'User not found');
+    }
+  };
+
   const handleCreateChat = async (username?: string): Promise<void> => {
     try {
       const targetUsername = username || searchQuery.trim();
@@ -96,26 +153,48 @@ const Dashboard: React.FC = () => {
         alert('Please enter a username to start a chat');
         return;
       }
-      const response = await fetch('http://localhost:3000/api/v1/chats/create', {
+
+      const existingChat = chats.find((chat) => {
+        const otherParticipant = chat.participants.find((p) => p._id !== currentUser?.id);
+        return otherParticipant?.username.toLowerCase() === targetUsername.toLowerCase();
+      });
+
+      if (existingChat) {
+        navigate(`/chat/${existingChat._id}`);
+        setSearchQuery('');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ username: targetUsername }),
       });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+      }
       const data: { success: boolean; data: Chat; message?: string } = await response.json();
       if (data.success) {
-        setChats((prev) => [data.data, ...prev]);
+        // Prevent duplicates when adding the new chat
+        setChats((prev) => {
+          if (prev.some((chat) => chat._id === data.data._id)) {
+            return prev;
+          }
+          return [data.data, ...prev];
+        });
         setSearchQuery('');
         navigate(`/chat/${data.data._id}`);
       } else {
-        alert(data.message);
+        alert(data.message || 'Failed to create chat');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating chat:', err);
+      alert('Failed to create chat: ' + err.message);
     }
   };
 
-  // Handle logout
   const handleLogout = async (): Promise<void> => {
     try {
       await logout();
@@ -125,27 +204,10 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#111827]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1 }}
-          className="text-white"
-        >
-          Loading...
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <AnimatedPage>
       <div className="min-h-screen bg-card dark:bg-background flex flex-col md:flex-row">
-        {/* Sidebar */}
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-
-        {/* Main content */}
         <div className="flex-1 bg-[#111827]">
           <header className="bg-card dark:bg-gray-800 shadow-sm sticky top-0 z-10">
             <div className="px-4 py-3 flex items-center justify-between">
@@ -197,27 +259,25 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
           </header>
-
           <main className="p-4 flex-1">
-            {user && (
-              <div className="mb-4 text-white">
-                Welcome, {user.username}!
-              </div>
+            {currentUser && <div className="mb-4 text-white">Welcome, {currentUser.username}!</div>}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm"
+              >
+                {error}
+              </motion.div>
             )}
             {filteredChats.length > 0 ? (
               <ChatList chats={filteredChats} />
             ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-center py-10"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10">
                 <p className="text-muted-foreground dark:text-gray-400">
-                  {searchQuery.trim()
-                    ? 'No matching conversations found'
-                    : 'No conversations yet'}
+                  {searchQuery.trim() ? 'No matching conversations found' : 'No conversations yet'}
                 </p>
-                {searchQuery.trim() && (
+                {searchQuery.trim() && searchedUser && (
                   <Button
                     variant="primary"
                     size="sm"

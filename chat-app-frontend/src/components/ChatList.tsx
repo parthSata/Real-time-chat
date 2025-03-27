@@ -1,13 +1,13 @@
+// src/components/ChatList.tsx
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 interface Chat {
   _id: string;
   participants: { _id: string; username: string }[];
-  lastMessage?: string; // Optional, as it might not exist yet
+  lastMessage?: string;
   updatedAt: string;
-  unread?: number; // Optional, adjust based on your backend
+  unread?: number;
 }
 
 interface ChatListProps {
@@ -15,75 +15,44 @@ interface ChatListProps {
 }
 
 const ChatList: React.FC<ChatListProps> = ({ chats }) => {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
-  };
+  const navigate = useNavigate();
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="show"
-      className="space-y-2"
-    >
+    <div className="space-y-3">
       {chats.map((chat) => {
-        // Assuming the first participant that isn't the current user is the chat "name"
-        const otherParticipant = chat.participants.find(
-          (p) => p._id !== localStorage.getItem('userId') // Adjust based on AuthContext
-        );
+        const otherParticipant = chat.participants.find((p) => p._id !== chat.participants[0]._id); // Adjust based on current user
         return (
-          <motion.div
-            key={chat._id}
-            variants={itemVariants}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <div
+            key={chat._id} // Ensure the key is unique
+            onClick={() => navigate(`/chat/${chat._id}`)}
+            className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
           >
-            <Link
-              to={`/chat/${chat._id}`}
-              className="flex items-center p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              <div className="relative">
-                <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant?.username}`}
-                  alt={otherParticipant?.username}
-                  className="w-12 h-12 rounded-full"
-                />
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-foreground dark:text-white">
+                  {otherParticipant?.username || 'Unknown User'}
+                </p>
+                {chat.lastMessage && (
+                  <p className="text-sm text-muted-foreground dark:text-gray-400 truncate">
+                    {chat.lastMessage}
+                  </p>
+                )}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground dark:text-gray-400">
+                  {new Date(chat.updatedAt).toLocaleTimeString()}
+                </p>
                 {chat.unread && chat.unread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#0ea5e9] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="inline-block ml-2 px-2 py-1 text-xs font-semibold text-white bg-primary rounded-full">
                     {chat.unread}
                   </span>
                 )}
               </div>
-              <div className="ml-3 flex-1">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium text-white">{otherParticipant?.username}</h3>
-                  <span className="text-xs text-gray-500">
-                    {new Date(chat.updatedAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 truncate">
-                  {chat.lastMessage || 'No messages yet'}
-                </p>
-              </div>
-            </Link>
-          </motion.div>
+            </div>
+          </div>
         );
       })}
-    </motion.div>
+    </div>
   );
 };
 
