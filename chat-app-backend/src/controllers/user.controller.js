@@ -203,35 +203,26 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
-// Get the current user's details
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const userId = req.user?._id;
-  if (!userId) throw new ApiError(401, "Unauthorized");
-
-  const user = await User.findById(userId).select("+accessToken");
-  if (!user) throw new ApiError(404, "User not found");
-
-  const token = req.cookies?.accessToken;
-  if (!user.accessToken || user.accessToken !== token) {
-    throw new ApiError(401, "Session invalid or expired");
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
   }
 
-  const userResponse = {
-    id: user._id,
-    username: user.username,
-    email: user.email,
-    profilePic: user.profilePic,
-    status: user.status,
-    isOnline: user.isOnline,
-  };
+  // Optionally, fetch the user from the database to ensure the data is fresh
+  const userData = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+  if (!userData) {
+    throw new ApiError(404, "User not found");
+  }
 
   return res
     .status(200)
     .json(
-      new ApiResponse(200, { user: userResponse }, "User fetched successfully")
+      new ApiResponse(200, { user: userData }, "User fetched successfully")
     );
 });
-
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;

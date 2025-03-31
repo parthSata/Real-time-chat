@@ -1,6 +1,5 @@
 // Export a function to set up chat functionality
 export function setupChatSocket(io, onlineUsers) {
-  // Listen for new socket connections
   io.on("connection", (socket) => {
     // Handle the "chat-message" event when a user sends a message
     socket.on("chat-message", (message) => {

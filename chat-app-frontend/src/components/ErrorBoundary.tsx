@@ -1,37 +1,28 @@
 // components/ErrorBoundary.tsx
-import React, { Component, ReactNode } from 'react';
+import { Component, ReactNode } from 'react';
 
-interface Props {
+interface ErrorBoundaryProps {
     children: ReactNode;
 }
 
-interface State {
+interface ErrorBoundaryState {
     hasError: boolean;
 }
 
-class ErrorBoundary extends Component<Props, State> {
-    state: State = { hasError: false };
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    state: ErrorBoundaryState = { hasError: false };
 
-    static getDerivedStateFromError(): State {
+    static getDerivedStateFromError() {
         return { hasError: true };
     }
 
-    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    componentDidCatch(error: any, errorInfo: any) {
         console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
 
     render() {
         if (this.state.hasError) {
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-100">
-                    <div className="text-center">
-                        <h1 className="text-2xl font-bold text-red-600">Something went wrong.</h1>
-                        <p className="mt-2 text-gray-600">
-                            An unexpected error occurred. Please try refreshing the page.
-                        </p>
-                    </div>
-                </div>
-            );
+            return <h1>Something went wrong. Please try again later.</h1>;
         }
         return this.props.children;
     }

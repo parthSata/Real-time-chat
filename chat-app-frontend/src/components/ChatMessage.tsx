@@ -1,47 +1,41 @@
+// ChatMessage.tsx
 import React from 'react';
 import { motion } from 'framer-motion';
 
 interface ChatMessageProps {
-    message: {
-        id: string;
-        text: string;
-        sender: string;
-        timestamp: Date;
-        isMe: boolean;
-    };
+  message: {
+    id: string;
+    text: string;
+    sender: string;
+    timestamp: Date;
+    isMe: boolean;
+  };
 }
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
-    const messageVariants = {
-        initial: {
-            opacity: 0,
-            y: 20,
-            x: message.isMe ? 20 : -20
-        },
-        animate: {
-            opacity: 1,
-            y: 0,
-            x: 0,
-            transition: {
-                duration: 0.3,
-                ease: "easeOut"
-            }
-        },
-    };
-
-    return (
-        <motion.div
-            variants={messageVariants}
-            initial="initial"
-            animate="animate"
-            className={`chat-bubble ${message.isMe ? 'sent ' : 'received'}`}
-        >
-            <div className="text-md">{message.text}</div>
-            <div className="text-xs mt-1 opacity-70">
-                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </div>
-        </motion.div>
-    );
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex ${message.isMe ? 'justify-end' : 'justify-start'} mb-2`}
+    >
+      <div
+        className={`max-w-xs px-4 py-2 rounded-lg ${
+          message.isMe
+            ? 'bg-primary-500 text-white'
+            : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white'
+        }`}
+      >
+        <p>{message.text}</p>
+        <p className="text-xs text-gray-400 mt-1">
+          {message.timestamp.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </p>
+      </div>
+    </motion.div>
+  );
 };
 
 export default ChatMessage;

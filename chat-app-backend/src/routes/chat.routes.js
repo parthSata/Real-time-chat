@@ -1,6 +1,5 @@
-// routes/chat.routes.js
 import express from "express";
-import { body, validationResult } from "express-validator";
+import { body, param, validationResult } from "express-validator";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -16,6 +15,7 @@ const validate = (req, res, next) => {
 };
 
 const initializeChatRoutes = (chatController) => {
+  // POST /create - Create a new chat
   router.post(
     "/create",
     verifyJWT,
@@ -26,17 +26,18 @@ const initializeChatRoutes = (chatController) => {
         .withMessage("Username is required"),
       validate,
     ],
-    (req, res, next) => chatController.createChat(req, res, next) // Use chatController.createChat
+    (req, res, next) => chatController.createChat(req, res, next)
   );
 
+  // POST /message - Send a message in a chat
   router.post(
     "/message",
     verifyJWT,
     [
       body("chatId")
         .trim()
-        .isLength({ min: 1 })
-        .withMessage("Chat ID is required"),
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
       body("content")
         .trim()
         .isLength({ min: 1 })
@@ -46,18 +47,35 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.sendMessage(req, res, next)
   );
 
+  // GET /my-chats - Fetch the logged-in user's chats
+  router.get("/my-chats", verifyJWT, (req, res, next) =>
+    chatController.getMyChats(req, res, next)
+  );
+
+  // GET /:chatId - Fetch a specific chat by ID
   router.get(
-    "/my-chats",
+    "/:chatId",
     verifyJWT,
-    (req, res, next) => chatController.getMyChats(req, res, next) // Use chatController.getMyChats
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    (req, res, next) => chatController.getChatById(req, res, next)
   );
 
-  router.get("/:chatId", verifyJWT, (req, res, next) =>
-    chatController.getChatById(req, res, next)
-  );
-
-  router.get("/:chatId/messages", verifyJWT, (req, res, next) =>
-    chatController.getChatMessages(req, res, next)
+  // GET /:chatId/messages - Fetch messages for a specific chat
+  router.get(
+    "/:chatId/messages",
+    verifyJWT,
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    (req, res, next) => chatController.getChatMessages(req, res, next)
   );
 
   return router;

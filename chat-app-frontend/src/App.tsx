@@ -56,11 +56,11 @@ function App() {
             <Route
               path="/chat/:id"
               element={
-                <ErrorBoundary>
+                // <ErrorBoundary>
                   <ProtectedRoute>
                     <ChatRoom />
                   </ProtectedRoute>
-                </ErrorBoundary>
+                // </ErrorBoundary>
               }
             />
             <Route

@@ -1,6 +1,6 @@
-// src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import io, { Socket } from 'socket.io-client';
 
 interface User {
   id: string;
@@ -19,6 +19,7 @@ interface AuthContextType {
   register: (username: string, email: string, password: string, profilePic?: File) => Promise<void>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
+  socket: Socket | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,20 +38,61 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  console.log("🚀 ~ user:", user)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+  const [socket, setSocket] = useState<Socket | null>(null);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const newSocket = io('http://localhost:3000', {
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+      });
+
+      newSocket.on('connect', () => {
+        console.log('Socket connected:', newSocket.id);
+        newSocket.emit('join', user.id); // Join user ID room
+      });
+
+      newSocket.on('disconnect', () => {
+        console.log('Socket disconnected');
+      });
+
+      setSocket(newSocket);
+
+      return () => {
+        newSocket.disconnect();
+        setSocket(null);
+      };
+    } else if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+  }, [isAuthenticated, user]);
 
   const checkSession = async () => {
     try {
       const response = await axios.get('http://localhost:3000/api/v1/users/me', {
         withCredentials: true,
       });
-      if (response.data.success) {
-        setUser(response.data.data.user);
+      console.log('Response Data:', response.data);
+      if (response.data.success && response.data.message) {
+        const newUser = {
+          ...response.data.message,
+          id: response.data.message._id,
+        };
+        setUser((prevUser) => {
+          if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
+            return prevUser;
+          }
+          return newUser;
+        });
         setIsAuthenticated(true);
       } else {
         setUser(null);
         setIsAuthenticated(false);
+        console.log('Session check failed: No user data in response or success is false');
       }
     } catch (error: any) {
       console.error('Session check failed:', error.message);
@@ -58,23 +100,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('Cannot connect to the backend server. Please ensure the server is running on http://localhost:3000.');
       }
       if (error.response?.status === 401) {
+        console.log('Received 401, attempting to refresh token...');
         try {
-          await axios.post('http://localhost:3000/api/v1/users/refresh-token', {}, { withCredentials: true });
+          const refreshResponse = await axios.post('http://localhost:3000/api/v1/users/refresh-token', {}, { withCredentials: true });
+          console.log('Token refresh response:', refreshResponse.data);
           const retryResponse = await axios.get('http://localhost:3000/api/v1/users/me', {
             withCredentials: true,
           });
-          if (retryResponse.data.success) {
-            setUser(retryResponse.data.data.user);
+          console.log('Retry session check response:', retryResponse.data);
+          if (retryResponse.data.success && retryResponse.data.message) {
+            const newUser = {
+              ...retryResponse.data.message,
+              id: retryResponse.data.message._id,
+            };
+            setUser((prevUser) => {
+              if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
+                return prevUser;
+              }
+              return newUser;
+            });
             setIsAuthenticated(true);
+            console.log('User authenticated after token refresh:', retryResponse.data.message);
+          } else {
+            setUser(null);
+            setIsAuthenticated(false);
+            console.log('User not authenticated: No user data after token refresh');
           }
         } catch (refreshError) {
           console.error('Token refresh failed:', refreshError);
           setUser(null);
           setIsAuthenticated(false);
+          console.log('User not authenticated: Token refresh failed');
         }
       } else {
         setUser(null);
         setIsAuthenticated(false);
+        console.log('User not authenticated: Other error', error.response?.data);
       }
     } finally {
       setLoading(false);
@@ -93,7 +154,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { withCredentials: true }
       );
       if (response.data.success) {
-        setUser(response.data.data.user);
+        setUser({
+          ...response.data.message,
+          id: response.data.message._id,
+        });
         setIsAuthenticated(true);
       } else {
         throw new Error('Login failed');
@@ -131,7 +195,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       console.log('Registration response:', response.data);
       if (response.data.success) {
-        setUser(response.data.data.user);
+        setUser({
+          ...response.data.message,
+          id: response.data.message._id,
+        });
         setIsAuthenticated(true);
       } else {
         throw new Error('Registration failed');
@@ -161,7 +228,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, loading, login, register, logout, checkSession }}
+      value={{ user, isAuthenticated, loading, login, register, logout, checkSession, socket }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,6 +1,5 @@
 // Export a function to set up "both online" status checking
 export function setupBothOnlineSocket(io, onlineUsers) {
-  // Listen for new socket connections
   io.on("connection", (socket) => {
     // Handle the "check-both-online" event when a client requests status
     socket.on("check-both-online", () => {

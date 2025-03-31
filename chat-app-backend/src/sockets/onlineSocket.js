@@ -1,6 +1,5 @@
 // Export a function to set up online status handling
 export function setupOnlineSocket(io, onlineUsers) {
-  // Listen for new socket connections
   io.on("connection", (socket) => {
     // Log when a user connects, using their unique socket ID
     console.log("A user connected:", socket.id);
