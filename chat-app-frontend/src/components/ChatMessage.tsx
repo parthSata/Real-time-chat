@@ -1,4 +1,3 @@
-// ChatMessage.tsx
 import React from 'react';
 import { motion } from 'framer-motion';
 
@@ -20,11 +19,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       className={`flex ${message.isMe ? 'justify-end' : 'justify-start'} mb-2`}
     >
       <div
-        className={`max-w-xs px-4 py-2 rounded-lg ${
-          message.isMe
-            ? 'bg-primary-500 text-white'
-            : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white'
-        }`}
+        className={`max-w-xs px-4 py-2 rounded-lg ${message.isMe
+          ? 'bg-primary-500 text-white'
+          : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white'
+          }`}
       >
         <p>{message.text}</p>
         <p className="text-xs text-gray-400 mt-1">

@@ -38,7 +38,6 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  console.log("🚀 ~ user:", user)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -69,7 +68,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       socket.disconnect();
       setSocket(null);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated,]);
 
   const checkSession = async () => {
     try {
@@ -80,8 +79,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.data.success && response.data.message) {
         const newUser = {
           ...response.data.message,
-          id: response.data.message._id,
+          id: String(response.data.message._id), // Ensure id is a string
         };
+        console.log('Setting user with ID:', newUser.id); // Debug log
         setUser((prevUser) => {
           if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
             return prevUser;
@@ -111,8 +111,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (retryResponse.data.success && retryResponse.data.message) {
             const newUser = {
               ...retryResponse.data.message,
-              id: retryResponse.data.message._id,
+              id: String(retryResponse.data.message._id),
             };
+            console.log('Setting user with ID after token refresh:', newUser.id); // Debug log
             setUser((prevUser) => {
               if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
                 return prevUser;
@@ -154,10 +155,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { withCredentials: true }
       );
       if (response.data.success) {
-        setUser({
+        const newUser = {
           ...response.data.message,
-          id: response.data.message._id,
-        });
+          id: String(response.data.message._id),
+        };
+        console.log('Setting user with ID after login:', newUser.id); // Debug log
+        setUser(newUser);
         setIsAuthenticated(true);
       } else {
         throw new Error('Login failed');
@@ -195,10 +198,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       console.log('Registration response:', response.data);
       if (response.data.success) {
-        setUser({
+        const newUser = {
           ...response.data.message,
-          id: response.data.message._id,
-        });
+          id: String(response.data.message._id),
+        };
+        console.log('Setting user with ID after registration:', newUser.id); // Debug log
+        setUser(newUser);
         setIsAuthenticated(true);
       } else {
         throw new Error('Registration failed');

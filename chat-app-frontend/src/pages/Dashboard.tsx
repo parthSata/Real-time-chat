@@ -25,10 +25,10 @@ interface Chat {
   participants: { _id: string; username: string; profilePic?: string; isOnline?: boolean; status?: string }[];
   lastMessage?: string;
   updatedAt: string;
-  createdAt?: string;
-  isGroupChat?: boolean;
+  createdAt: string;
+  isGroupChat: boolean;
   messages?: string[];
-  chatName?: string;
+  chatName: string;
   __v?: number;
   unread?: number;
 }
@@ -73,8 +73,12 @@ const Dashboard: React.FC = () => {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         if (data.success) {
-          const fetchedChats = data.message || [];
-          console.log('Fetched Chats:', fetchedChats); // Debug fetched data
+          const fetchedChats = (data.message || []).map((chat: Chat) => ({
+            ...chat,
+            isGroupChat: chat.isGroupChat ?? false,
+            createdAt: chat.createdAt || new Date().toISOString(),
+            chatName: chat.chatName || 'Unknown Chat',
+          }));
           setChats(fetchedChats);
           setError('');
         } else {
@@ -119,7 +123,7 @@ const Dashboard: React.FC = () => {
         if (prev.some((existingChat) => existingChat._id === chat._id)) {
           return prev;
         }
-        return [chat, ...prev];
+        return [{ ...chat, isGroupChat: chat.isGroupChat ?? false, createdAt: chat.createdAt || new Date().toISOString(), chatName: chat.chatName || 'Unknown Chat' }, ...prev];
       });
     });
 
@@ -195,7 +199,7 @@ const Dashboard: React.FC = () => {
       }
       const data: { success: boolean; data: string; message: Chat } = await response.json();
       if (data.success) {
-        const newChat = data.message;
+        const newChat = { ...data.message, isGroupChat: data.message.isGroupChat ?? false, createdAt: data.message.createdAt || new Date().toISOString(), chatName: data.message.chatName || 'Unknown Chat' };
         if (!newChat || !newChat._id) {
           setError('Failed to create chat: Invalid chat ID');
           return;
@@ -208,6 +212,7 @@ const Dashboard: React.FC = () => {
         });
         setSearchQuery('');
         setError('');
+        navigate(`/chat/${newChat._id}`); // Navigate to the new chat
       } else {
         setError('Failed to create chat');
       }
@@ -221,7 +226,7 @@ const Dashboard: React.FC = () => {
       await logout();
       navigate('/login');
     } catch (err) {
-      console.error('Logout failed:', err);
+      setError('Logout failed');
     }
   };
 

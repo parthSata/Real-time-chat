@@ -78,7 +78,14 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.getChatMessages(req, res, next)
   );
 
-  return router;
+  router.post(
+    "/message/read",
+    verifyJWT,
+    [body("messageId").trim().isMongoId().withMessage("Message ID must be valid"), validate],
+    (req, res, next) => chatController.markMessageAsRead(req, res, next)
+  );
+
+  return router;  
 };
 
 export default initializeChatRoutes;

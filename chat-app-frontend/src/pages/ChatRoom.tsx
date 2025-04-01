@@ -34,11 +34,19 @@ const ChatRoom: React.FC = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
-  console.log("🚀 ~ chat:", chat)
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, socket } = useAuth();
+
+  // Log user.id only once when the component mounts
+  useEffect(() => {
+    if (user) {
+      console.log('Logged-in user in ChatRoom:', user);
+    } else {
+      console.log('No logged-in user in ChatRoom');
+    }
+  }, []); // Empty dependency array to run only once on mount
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -73,27 +81,28 @@ const ChatRoom: React.FC = () => {
   }, [id, isAuthenticated, navigate]);
 
   useEffect(() => {
-    if (!socket || !id) return;
+    if (!socket || !id || !user) return;
 
-    // Join the chat room
-    socket.emit('join', id);
+    console.log(`Joining chat room ${id} for user ${user.id}`);
+    socket.emit('joinChat', id);
 
     socket.on('newMessage', ({ chatId, message }: { chatId: string; message: Message }) => {
+      console.log(`Received newMessage for chat ${chatId}:`, message);
       if (chatId === id) {
         setMessages((prev) => {
-          // Avoid duplicate messages
           if (prev.some((msg) => msg._id === message._id)) {
             return prev;
           }
-          return [...prev, message];
+          return [...prev, { ...message, timestamp: new Date(message.timestamp) }];
         });
       }
     });
 
     return () => {
       socket.off('newMessage');
+      socket.emit('leaveChat', id);
     };
-  }, [socket, id]);
+  }, [socket, id, user]);
 
   useEffect(() => {
     scrollToBottom();
@@ -127,7 +136,12 @@ const ChatRoom: React.FC = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       if (data.success) {
-        return data.message || [];
+        const messages = (data.message || []).map((msg: Message) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        console.log('Fetched Messages in ChatRoom:', messages);
+        return messages;
       } else {
         throw new Error(data.message || 'Failed to fetch messages');
       }
@@ -178,7 +192,6 @@ const ChatRoom: React.FC = () => {
       </div>
     );
   }
-  console.log("user", user);
 
   if (!chat || !user) {
     return (
@@ -264,18 +277,24 @@ const ChatRoom: React.FC = () => {
             <div className="space-y-1">
               <AnimatePresence>
                 {Array.isArray(messages) && messages.length > 0 ? (
-                  messages.map((msg) => (
-                    <ChatMessage
-                      key={msg._id}
-                      message={{
-                        id: msg._id,
-                        text: msg.message,
-                        sender: msg.sender._id,
-                        timestamp: new Date(msg.timestamp),
-                        isMe: msg.sender._id === user.id,
-                      }}
-                    />
-                  ))
+                  messages.map((msg) => {
+                    const isMe = msg.sender._id.toString() === user.id.toString();
+                    console.log(
+                      `Message ${msg._id}: sender._id=${msg.sender._id}, user.id=${user.id}, isMe=${isMe}, sender object=${JSON.stringify(msg.sender)}`
+                    );
+                    return (
+                      <ChatMessage
+                        key={msg._id}
+                        message={{
+                          id: msg._id,
+                          text: msg.message,
+                          sender: msg.sender._id,
+                          timestamp: new Date(msg.timestamp),
+                          isMe: isMe,
+                        }}
+                      />
+                    );
+                  })
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 text-center">No messages yet.</p>
                 )}

@@ -43,6 +43,7 @@ class ChatController {
         .lean();
 
       populatedChat._id = populatedChat._id.toString();
+      populatedChat.isGroupChat = populatedChat.isGroupChat ?? false;
       if (populatedChat.lastMessage) {
         populatedChat.lastMessage._id =
           populatedChat.lastMessage._id.toString();
@@ -62,6 +63,8 @@ class ChatController {
 
     const chat = new Chat({
       participants: [currentUserId, targetUser._id],
+      isGroupChat: false,
+      chatName: targetUser.username, // Set chatName to the target user's username
     });
     await chat.save();
 
@@ -72,6 +75,8 @@ class ChatController {
 
     if (populatedChat && populatedChat._id) {
       populatedChat._id = populatedChat._id.toString();
+      populatedChat.isGroupChat = populatedChat.isGroupChat ?? false;
+      populatedChat.chatName = populatedChat.chatName || targetUser.username;
       if (populatedChat.lastMessage) {
         populatedChat.lastMessage._id =
           populatedChat.lastMessage._id.toString();
@@ -107,7 +112,8 @@ class ChatController {
         (p) => p._id.toString() !== currentUserId.toString()
       );
       chat._id = chat._id.toString();
-      chat.chatName = otherParticipant?.username || "Unknown User"; // Add chatName
+      chat.isGroupChat = chat.isGroupChat ?? false;
+      chat.chatName = otherParticipant?.username || "Unknown User";
       if (chat.lastMessage) {
         chat.lastMessage._id = chat.lastMessage._id.toString();
         chat.lastMessage = chat.lastMessage.message || "Message not available";
@@ -171,6 +177,7 @@ class ChatController {
       populatedMessage.sender._id = populatedMessage.sender._id.toString();
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
+      populatedMessage.timestamp = newMessage.timestamp;
     }
 
     chat.participants.forEach((participantId) => {
@@ -179,6 +186,11 @@ class ChatController {
         chatId: chatId.toString(),
         message: populatedMessage,
       });
+    });
+
+    this.io.to(chatId.toString()).emit("newMessage", {
+      chatId: chatId.toString(),
+      message: populatedMessage,
     });
 
     const senderSocketId = [...this.onlineUsers.entries()].find(
@@ -219,6 +231,7 @@ class ChatController {
     }
 
     chat._id = chat._id.toString();
+    chat.isGroupChat = chat.isGroupChat ?? false;
     chat.participants = chat.participants.map((participant) => {
       participant._id = participant._id.toString();
       return participant;
@@ -260,6 +273,7 @@ class ChatController {
         ...message.recipient,
         _id: message.recipient._id.toString(),
       },
+      timestamp: message.timestamp,
     }));
 
     return res
@@ -274,13 +288,17 @@ const initializeChatSocket = (io, onlineUsers) => {
   const chatController = new ChatController(io, onlineUsers);
 
   io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
-
     socket.on("join", (userId) => {
-      console.log(`User ${userId} joined with socket ID ${socket.id}`);
       onlineUsers.set(socket.id, userId);
       socket.join(userId);
-      console.log("Updated onlineUsers:", [...onlineUsers.entries()]);
+    });
+
+    socket.on("joinChat", (chatId) => {
+      socket.join(chatId);
+    });
+
+    socket.on("leaveChat", (chatId) => {
+      socket.leave(chatId);
     });
 
     socket.on("chat-message", (message) => {
@@ -295,12 +313,7 @@ const initializeChatSocket = (io, onlineUsers) => {
     });
 
     socket.on("disconnect", () => {
-      const userId = onlineUsers.get(socket.id);
-      console.log(`User disconnected: ${socket.id}, userId: ${userId}`);
       onlineUsers.delete(socket.id);
-      console.log("Updated onlineUsers after disconnect:", [
-        ...onlineUsers.entries(),
-      ]);
     });
   });
 
