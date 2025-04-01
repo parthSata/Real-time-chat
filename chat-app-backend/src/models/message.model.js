@@ -17,8 +17,10 @@ const MessageSchema = new mongoose.Schema(
       ref: "Chat",
       required: true,
     },
-    message: { type: String, ref: "Message" }, // Last unread message
+    message: { type: String, ref: "Message", required: true }, // Last unread message
+    delivered: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
+    timestamp: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

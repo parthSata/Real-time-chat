@@ -12,6 +12,7 @@ interface Participant {
   _id: string;
   username: string;
   isOnline: boolean;
+  profilePic?: string;
 }
 
 interface Message {
@@ -48,7 +49,6 @@ const ChatRoom: React.FC = () => {
       return;
     }
 
-    // Check if id is undefined or not a valid MongoDB ObjectId-like string
     if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
       console.log(`Invalid chat ID detected: ${id}`);
       setError('Invalid chat ID format');
@@ -93,7 +93,6 @@ const ChatRoom: React.FC = () => {
     });
 
     socket.on('messageDelivered', ({ messageId }: { messageId: string }) => {
-      console.log(`Message ${messageId} delivered`);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === messageId ? { ...msg, delivered: true } : msg
@@ -102,7 +101,6 @@ const ChatRoom: React.FC = () => {
     });
 
     socket.on('messageRead', ({ messageId }: { messageId: string }) => {
-      console.log(`Message ${messageId} read`);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === messageId ? { ...msg, isRead: true, delivered: true } : msg
@@ -140,7 +138,7 @@ const ChatRoom: React.FC = () => {
       newMessages.forEach((msg) => {
         const isMe = msg.sender._id === user.id;
         console.log(
-          `Sender ID: ${msg.sender._id}, Receiver ID: ${msg.recipient._id}, User ID: ${user.id}, isMe: ${isMe}`
+          `Sender ID: ${msg.sender._id}, Receiver ID: ${msg.recipient._id}, User ID: ${user.id}, isMe: ${isMe}, Delivered: ${msg.delivered}, Read: ${msg.isRead}`
         );
         setLoggedMessageIds((prev) => new Set(prev).add(msg._id));
       });
@@ -169,6 +167,7 @@ const ChatRoom: React.FC = () => {
     });
     const data = await response.json();
     if (!response.ok) {
+      console.error('Fetch messages error:', data);
       throw new Error(data.message || `HTTP error! Status: ${response.status}`);
     }
     if (!data.success) {
@@ -176,9 +175,9 @@ const ChatRoom: React.FC = () => {
     }
     return (data.message || []).map((msg: Message) => ({
       ...msg,
-      timestamp: new Date(msg.timestamp),
-      delivered: msg.delivered ?? false,
-      isRead: msg.isRead ?? false,
+      timestamp: new Date(msg.timestamp), // Parse ISO string to Date
+      delivered: msg.delivered ?? false, // Default to false if undefined
+      isRead: msg.isRead ?? false, // Default to false if undefined
     }));
   };
 
@@ -197,10 +196,14 @@ const ChatRoom: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({ chatId: id, content: message }),
       });
-      if (!response.ok) throw new Error('Failed to send message');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to send message');
+      }
       const data = await response.json();
       if (data.success) setMessage('');
     } catch (err) {
+      console.error('Send message error:', err);
       setError('Failed to send message. Please try again.');
     }
   };
@@ -239,6 +242,10 @@ const ChatRoom: React.FC = () => {
     );
   }
 
+  const profileImage = otherParticipant.profilePic
+    ? `${otherParticipant.profilePic}`
+    : `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`;
+
   return (
     <AnimatedPage>
       <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -253,9 +260,12 @@ const ChatRoom: React.FC = () => {
               </button>
               <div className="ml-3 flex items-center">
                 <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`}
+                  src={profileImage}
                   alt={otherParticipant.username}
-                  className="w-10 h-10 rounded-full"
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`;
+                  }}
                 />
                 <div className="ml-3">
                   <h2 className="text-lg font-medium text-gray-800 dark:text-white">{otherParticipant.username}</h2>
@@ -307,8 +317,8 @@ const ChatRoom: React.FC = () => {
                       sender: msg.sender._id,
                       timestamp: new Date(msg.timestamp),
                       isMe: msg.sender._id === user.id,
-                      delivered: msg.delivered,
-                      isRead: msg.isRead,
+                      delivered: msg.delivered ?? false,
+                      isRead: msg.isRead ?? false,
                     }}
                   />
                 ))

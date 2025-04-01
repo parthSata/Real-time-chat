@@ -157,6 +157,7 @@ class ChatController {
       chat.participants.find((p) => p._id.toString() === recipientId.toString())
         ?.isOnline;
 
+    const timestamp = new Date(); // Consistent ISO timestamp
     const newMessage = new Message({
       recipient: recipientId,
       sender: sender._id,
@@ -164,7 +165,7 @@ class ChatController {
       message: content,
       delivered: isRecipientOnline || false,
       isRead: false,
-      timestamp: new Date(),
+      timestamp: timestamp,
     });
 
     await newMessage.save();
@@ -184,7 +185,7 @@ class ChatController {
       populatedMessage.sender._id = populatedMessage.sender._id.toString();
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
-      populatedMessage.timestamp = newMessage.timestamp;
+      populatedMessage.timestamp = timestamp.toISOString(); // Ensure ISO string
     }
 
     chat.participants.forEach((participant) => {
@@ -206,6 +207,85 @@ class ChatController {
         new ApiResponse(201, populatedMessage, "Message sent successfully")
       );
   });
+
+  // sendMessage = asyncHandler(async (req, res) => {
+  //   const { chatId, content } = req.body;
+  //   const sender = req.user;
+
+  //   if (!chatId || !content) {
+  //     throw new ApiError(400, "Chat ID and message content are required");
+  //   }
+
+  //   const chat = await Chat.findOne({
+  //     _id: chatId,
+  //     participants: sender._id,
+  //   }).populate("participants", "isOnline");
+
+  //   if (!chat) {
+  //     throw new ApiError(404, "Chat not found or access denied");
+  //   }
+
+  //   const recipientId = chat.participants.find(
+  //     (p) => p._id.toString() !== sender._id.toString()
+  //   )?._id;
+  //   const isRecipientOnline =
+  //     this.onlineUsers.has(recipientId.toString()) ||
+  //     chat.participants.find((p) => p._id.toString() === recipientId.toString())
+  //       ?.isOnline;
+
+  //   const newMessage = new Message({
+  //     recipient: recipientId,
+  //     sender: sender._id,
+  //     chatId: chat._id,
+  //     message: content,
+  //     delivered: isRecipientOnline || false,
+  //     isRead: false,
+  //     timestamp: new Date(),
+  //   });
+  //   console.log(
+  //     "🚀 ~ ChatController ~ sendMessage=asyncHandler ~ newMessage:",
+  //     newMessage.timestamp
+  //   );
+
+  //   await newMessage.save();
+
+  //   chat.lastMessage = newMessage._id;
+  //   chat.updatedAt = new Date();
+  //   await chat.save();
+
+  //   const populatedMessage = await Message.findById(newMessage._id)
+  //     .populate("sender", "_id username profilePic")
+  //     .populate("recipient", "_id username profilePic")
+  //     .lean();
+
+  //   if (populatedMessage) {
+  //     populatedMessage._id = populatedMessage._id.toString();
+  //     populatedMessage.chatId = populatedMessage.chatId.toString();
+  //     populatedMessage.sender._id = populatedMessage.sender._id.toString();
+  //     populatedMessage.recipient._id =
+  //       populatedMessage.recipient._id.toString();
+  //     populatedMessage.timestamp = newMessage.timestamp;
+  //   }
+
+  //   chat.participants.forEach((participant) => {
+  //     this.io.to(participant._id.toString()).emit("newMessage", {
+  //       chatId: chatId.toString(),
+  //       message: populatedMessage,
+  //     });
+  //   });
+
+  //   if (isRecipientOnline) {
+  //     this.io.to(recipientId.toString()).emit("messageDelivered", {
+  //       messageId: newMessage._id.toString(),
+  //     });
+  //   }
+
+  //   return res
+  //     .status(201)
+  //     .json(
+  //       new ApiResponse(201, populatedMessage, "Message sent successfully")
+  //     );
+  // });
 
   getChatById = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
@@ -319,12 +399,10 @@ const initializeChatSocket = (io, onlineUsers) => {
 
     socket.on("joinChat", (chatId) => {
       socket.join(chatId);
-      console.log(`Socket ${socket.id} joined chat ${chatId}`);
     });
 
     socket.on("leaveChat", (chatId) => {
       socket.leave(chatId);
-      console.log(`Socket ${socket.id} left chat ${chatId}`);
     });
 
     socket.on("markAsRead", async ({ chatId, messageId }) => {
