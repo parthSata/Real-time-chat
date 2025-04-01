@@ -75,19 +75,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await axios.get('http://localhost:3000/api/v1/users/me', {
         withCredentials: true,
       });
-      console.log('Response Data:', response.data);
       if (response.data.success && response.data.message) {
-        const newUser = {
-          ...response.data.message,
-          id: String(response.data.message._id), // Ensure id is a string
-        };
-        console.log('Setting user with ID:', newUser.id); // Debug log
-        setUser((prevUser) => {
-          if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
-            return prevUser;
-          }
-          return newUser;
-        });
+        const newUser = { ...response.data.message, id: String(response.data.message.user._id) };
+        setUser(newUser);
         setIsAuthenticated(true);
       } else {
         setUser(null);
@@ -154,12 +144,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { email, password },
         { withCredentials: true }
       );
-      if (response.data.success) {
-        const newUser = {
-          ...response.data.message,
-          id: String(response.data.message._id),
-        };
-        console.log('Setting user with ID after login:', newUser.id); // Debug log
+      if (response.data.success && response.data.message) {
+        const newUser = { ...response.data.message, id: String(response.data.message._id) };
         setUser(newUser);
         setIsAuthenticated(true);
       } else {
@@ -197,12 +183,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       );
 
       console.log('Registration response:', response.data);
-      if (response.data.success) {
-        const newUser = {
-          ...response.data.message,
-          id: String(response.data.message._id),
-        };
-        console.log('Setting user with ID after registration:', newUser.id); // Debug log
+      if (response.data.success && response.data.message) {
+        const newUser = { ...response.data.message, id: String(response.data.message._id) };
         setUser(newUser);
         setIsAuthenticated(true);
       } else {

@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 class ChatController {
   constructor(io, onlineUsers) {
     this.io = io;
-    this.onlineUsers = onlineUsers;
+    this.onlineUsers = onlineUsers; // Map of socket IDs to user IDs
   }
 
   createChat = asyncHandler(async (req, res) => {
@@ -64,7 +64,7 @@ class ChatController {
     const chat = new Chat({
       participants: [currentUserId, targetUser._id],
       isGroupChat: false,
-      chatName: targetUser.username, // Set chatName to the target user's username
+      chatName: targetUser.username,
     });
     await chat.save();
 
@@ -143,19 +143,26 @@ class ChatController {
     const chat = await Chat.findOne({
       _id: chatId,
       participants: sender._id,
-    });
+    }).populate("participants", "isOnline");
 
     if (!chat) {
       throw new ApiError(404, "Chat not found or access denied");
     }
 
+    const recipientId = chat.participants.find(
+      (p) => p._id.toString() !== sender._id.toString()
+    )?._id;
+    const isRecipientOnline =
+      this.onlineUsers.has(recipientId.toString()) ||
+      chat.participants.find((p) => p._id.toString() === recipientId.toString())
+        ?.isOnline;
+
     const newMessage = new Message({
-      recipient: chat.participants.find(
-        (id) => id.toString() !== sender._id.toString()
-      ),
+      recipient: recipientId,
       sender: sender._id,
       chatId: chat._id,
       message: content,
+      delivered: isRecipientOnline || false,
       isRead: false,
       timestamp: new Date(),
     });
@@ -180,27 +187,16 @@ class ChatController {
       populatedMessage.timestamp = newMessage.timestamp;
     }
 
-    chat.participants.forEach((participantId) => {
-      const participantIdStr = participantId.toString();
-      this.io.to(participantIdStr).emit("newMessage", {
+    chat.participants.forEach((participant) => {
+      this.io.to(participant._id.toString()).emit("newMessage", {
         chatId: chatId.toString(),
         message: populatedMessage,
       });
     });
 
-    this.io.to(chatId.toString()).emit("newMessage", {
-      chatId: chatId.toString(),
-      message: populatedMessage,
-    });
-
-    const senderSocketId = [...this.onlineUsers.entries()].find(
-      ([_, userId]) => userId === sender._id.toString()
-    )?.[0];
-    if (senderSocketId) {
-      this.io.emit("chat-message", {
-        userId: sender._id.toString(),
-        message: content,
-        timestamp: new Date().toLocaleTimeString(),
+    if (isRecipientOnline) {
+      this.io.to(recipientId.toString()).emit("messageDelivered", {
+        messageId: newMessage._id.toString(),
       });
     }
 
@@ -282,6 +278,33 @@ class ChatController {
         new ApiResponse(200, formattedMessages, "Messages fetched successfully")
       );
   });
+
+  markMessageAsRead = asyncHandler(async (req, res) => {
+    const { messageId } = req.body;
+    const userId = req.user._id;
+
+    const message = await Message.findOne({
+      _id: messageId,
+      recipient: userId,
+    });
+    if (!message) {
+      throw new ApiError(404, "Message not found or access denied");
+    }
+
+    if (!message.isRead) {
+      message.isRead = true;
+      message.delivered = true;
+      await message.save();
+
+      this.io.to(message.chatId.toString()).emit("messageRead", {
+        messageId: message._id.toString(),
+      });
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Message marked as read"));
+  });
 }
 
 const initializeChatSocket = (io, onlineUsers) => {
@@ -291,29 +314,42 @@ const initializeChatSocket = (io, onlineUsers) => {
     socket.on("join", (userId) => {
       onlineUsers.set(socket.id, userId);
       socket.join(userId);
+      console.log(`User ${userId} joined with socket ${socket.id}`);
     });
 
     socket.on("joinChat", (chatId) => {
       socket.join(chatId);
+      console.log(`Socket ${socket.id} joined chat ${chatId}`);
     });
 
     socket.on("leaveChat", (chatId) => {
       socket.leave(chatId);
+      console.log(`Socket ${socket.id} left chat ${chatId}`);
     });
 
-    socket.on("chat-message", (message) => {
+    socket.on("markAsRead", async ({ chatId, messageId }) => {
       const userId = onlineUsers.get(socket.id);
-      if (userId) {
-        io.emit("chat-message", {
-          userId,
-          message,
-          timestamp: new Date().toLocaleTimeString(),
+      const message = await Message.findOne({
+        _id: messageId,
+        recipient: userId,
+      });
+      if (message && !message.isRead) {
+        message.isRead = true;
+        message.delivered = true;
+        await message.save();
+        io.to(chatId).emit("messageRead", {
+          messageId: message._id.toString(),
         });
+        console.log(
+          `Message ${messageId} marked as read by ${userId} in chat ${chatId}`
+        );
       }
     });
 
     socket.on("disconnect", () => {
+      const userId = onlineUsers.get(socket.id);
       onlineUsers.delete(socket.id);
+      console.log(`User ${userId} disconnected`);
     });
   });
 

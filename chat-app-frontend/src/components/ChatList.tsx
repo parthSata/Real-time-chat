@@ -22,10 +22,7 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
     return <div className="text-white">User not authenticated</div>;
   }
 
-  console.log('User :', user);
-  console.log('Current User ID:', user.id);
-
-  return (
+   return (
     <div className="space-y-3">
       {chats.map((chat) => {
         if (!Array.isArray(chat.participants) || chat.participants.length !== 2) {
@@ -42,14 +39,6 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
 
         // Ensure IDs are compared as strings
         const otherParticipant = chat.participants.find((p) => String(p._id) !== String(user.id));
-        console.log("🚀 ~ {chats.map ~ otherParticipant:", otherParticipant)
-
-
-        console.log('Chat Participants:', chat.participants); // Debug incoming chats data
-        console.log('Other User Data Debug:', chat.participants.find((p) => String(p._id) === String(user.id))); // Debug other participant data
-        console.log('Other User ID:', chat.participants[1]._id); // Debug other participant ID
-        console.log('Other User Data:', chat.participants[1]); // Debug other participant data
-
 
         if (!otherParticipant) {
           console.error(`No other participant found for chat ${chat.participants[1]._id}. Participants:`, chat.participants[1], 'User ID:', chat.participants[1]._id);

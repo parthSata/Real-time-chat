@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Phone, Video } from 'lucide-react';
 import AnimatedPage from '../components/AnimatedPage';
 import ChatMessage from '../components/ChatMessage';
@@ -11,6 +11,7 @@ const API_BASE_URL = 'http://localhost:3000';
 interface Participant {
   _id: string;
   username: string;
+  isOnline: boolean;
 }
 
 interface Message {
@@ -20,6 +21,7 @@ interface Message {
   recipient: { _id: string; username: string };
   chatId: string;
   timestamp: Date;
+  delivered: boolean;
   isRead: boolean;
 }
 
@@ -38,15 +40,7 @@ const ChatRoom: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, socket } = useAuth();
-
-  // Log user.id only once when the component mounts
-  useEffect(() => {
-    if (user) {
-      console.log('Logged-in user in ChatRoom:', user);
-    } else {
-      console.log('No logged-in user in ChatRoom');
-    }
-  }, []); // Empty dependency array to run only once on mount
+  const [loggedMessageIds, setLoggedMessageIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -54,8 +48,10 @@ const ChatRoom: React.FC = () => {
       return;
     }
 
-    if (!id || typeof id !== 'string') {
-      setError('Invalid chat ID');
+    // Check if id is undefined or not a valid MongoDB ObjectId-like string
+    if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+      console.log(`Invalid chat ID detected: ${id}`);
+      setError('Invalid chat ID format');
       navigate('/dashboard');
       return;
     }
@@ -65,12 +61,14 @@ const ChatRoom: React.FC = () => {
         setLoading(true);
         setError(null);
         const chatData = await fetchChat(id);
+        if (!chatData || !chatData._id) {
+          throw new Error('Chat data is invalid or empty');
+        }
         setChat(chatData);
-
         const messagesData = await fetchMessages(id);
         setMessages(messagesData);
       } catch (err: any) {
-        console.error('Error in loadChat:', err);
+        console.error('Error loading chat:', err.message);
         setError(err.message || 'Failed to load chat. Please try again.');
         navigate('/dashboard');
       } finally {
@@ -83,72 +81,105 @@ const ChatRoom: React.FC = () => {
   useEffect(() => {
     if (!socket || !id || !user) return;
 
-    console.log(`Joining chat room ${id} for user ${user.id}`);
     socket.emit('joinChat', id);
 
     socket.on('newMessage', ({ chatId, message }: { chatId: string; message: Message }) => {
-      console.log(`Received newMessage for chat ${chatId}:`, message);
       if (chatId === id) {
         setMessages((prev) => {
-          if (prev.some((msg) => msg._id === message._id)) {
-            return prev;
-          }
+          if (prev.some((msg) => msg._id === message._id)) return prev;
           return [...prev, { ...message, timestamp: new Date(message.timestamp) }];
         });
       }
     });
 
+    socket.on('messageDelivered', ({ messageId }: { messageId: string }) => {
+      console.log(`Message ${messageId} delivered`);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId ? { ...msg, delivered: true } : msg
+        )
+      );
+    });
+
+    socket.on('messageRead', ({ messageId }: { messageId: string }) => {
+      console.log(`Message ${messageId} read`);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId ? { ...msg, isRead: true, delivered: true } : msg
+        )
+      );
+    });
+
     return () => {
       socket.off('newMessage');
+      socket.off('messageDelivered');
+      socket.off('messageRead');
       socket.emit('leaveChat', id);
     };
   }, [socket, id, user]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (chat && user && socket && !loading) {
+      messages.forEach((msg) => {
+        if (msg.sender._id !== user.id && !msg.isRead) {
+          socket.emit('markAsRead', { chatId: id, messageId: msg._id });
+        }
+      });
+    }
+  }, [messages, chat, user, socket, id, loading]);
+
+  useLayoutEffect(() => {
+    if (!loading && messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [loading, messages]);
+
+  useEffect(() => {
+    if (user && messages.length > 0) {
+      const newMessages = messages.filter((msg) => !loggedMessageIds.has(msg._id));
+      newMessages.forEach((msg) => {
+        const isMe = msg.sender._id === user.id;
+        console.log(
+          `Sender ID: ${msg.sender._id}, Receiver ID: ${msg.recipient._id}, User ID: ${user.id}, isMe: ${isMe}`
+        );
+        setLoggedMessageIds((prev) => new Set(prev).add(msg._id));
+      });
+    }
+  }, [messages, user]);
 
   const fetchChat = async (chatId: string): Promise<Chat> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      if (data.success) {
-        return data.message;
-      } else {
-        throw new Error(data.message || 'Failed to fetch chat');
-      }
-    } catch (error) {
-      console.error('Fetch chat error:', error);
-      throw error;
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || `HTTP error! Status: ${response.status}`);
     }
+    if (!data.success || !data.message) {
+      throw new Error('Invalid chat data received from server');
+    }
+    return data.message;
   };
 
   const fetchMessages = async (chatId: string): Promise<Message[]> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      if (data.success) {
-        const messages = (data.message || []).map((msg: Message) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-        }));
-        console.log('Fetched Messages in ChatRoom:', messages);
-        return messages;
-      } else {
-        throw new Error(data.message || 'Failed to fetch messages');
-      }
-    } catch (error) {
-      console.error('Fetch messages error:', error);
-      throw error;
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || `HTTP error! Status: ${response.status}`);
     }
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to fetch messages');
+    }
+    return (data.message || []).map((msg: Message) => ({
+      ...msg,
+      timestamp: new Date(msg.timestamp),
+      delivered: msg.delivered ?? false,
+      isRead: msg.isRead ?? false,
+    }));
   };
 
   const scrollToBottom = () => {
@@ -168,11 +199,8 @@ const ChatRoom: React.FC = () => {
       });
       if (!response.ok) throw new Error('Failed to send message');
       const data = await response.json();
-      if (data.success) {
-        setMessage('');
-      }
+      if (data.success) setMessage('');
     } catch (err) {
-      console.error('Error sending message:', err);
       setError('Failed to send message. Please try again.');
     }
   };
@@ -197,14 +225,6 @@ const ChatRoom: React.FC = () => {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <p className="text-white">Chat or user not found. Redirecting...</p>
-      </div>
-    );
-  }
-
-  if (!chat.participants || !Array.isArray(chat.participants)) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <p className="text-white">Invalid chat data: No participants found.</p>
       </div>
     );
   }
@@ -240,8 +260,10 @@ const ChatRoom: React.FC = () => {
                 <div className="ml-3">
                   <h2 className="text-lg font-medium text-gray-800 dark:text-white">{otherParticipant.username}</h2>
                   <div className="flex items-center">
-                    <span className="h-2 w-2 rounded-full bg-green-500"></span>
-                    <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">Online</span>
+                    <span className={`h-2 w-2 rounded-full ${otherParticipant.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></span>
+                    <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                      {otherParticipant.isOnline ? 'Online' : 'Offline'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -272,33 +294,27 @@ const ChatRoom: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 p-4 overflow-y-auto">
+        <main className="flex-1 p-4 overflow-y-auto" style={{ minHeight: 0 }}>
           <div className="max-w-3xl mx-auto">
             <div className="space-y-1">
-              <AnimatePresence>
-                {Array.isArray(messages) && messages.length > 0 ? (
-                  messages.map((msg) => {
-                    const isMe = msg.sender._id.toString() === user.id.toString();
-                    console.log(
-                      `Message ${msg._id}: sender._id=${msg.sender._id}, user.id=${user.id}, isMe=${isMe}, sender object=${JSON.stringify(msg.sender)}`
-                    );
-                    return (
-                      <ChatMessage
-                        key={msg._id}
-                        message={{
-                          id: msg._id,
-                          text: msg.message,
-                          sender: msg.sender._id,
-                          timestamp: new Date(msg.timestamp),
-                          isMe: isMe,
-                        }}
-                      />
-                    );
-                  })
-                ) : (
-                  <p className="text-gray-500 dark:text-gray-400 text-center">No messages yet.</p>
-                )}
-              </AnimatePresence>
+              {Array.isArray(messages) && messages.length > 0 ? (
+                messages.map((msg) => (
+                  <ChatMessage
+                    key={msg._id}
+                    message={{
+                      id: msg._id,
+                      text: msg.message,
+                      sender: msg.sender._id,
+                      timestamp: new Date(msg.timestamp),
+                      isMe: msg.sender._id === user.id,
+                      delivered: msg.delivered,
+                      isRead: msg.isRead,
+                    }}
+                  />
+                ))
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 text-center">No messages yet.</p>
+              )}
               <div ref={messagesEndRef} />
             </div>
           </div>
