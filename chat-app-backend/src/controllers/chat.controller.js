@@ -5,6 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
+import { encrypt, decrypt } from "../utils/encryption.js";
 
 class ChatController {
   constructor(io, onlineUsers) {
@@ -116,6 +117,15 @@ class ChatController {
       chat.chatName = otherParticipant?.username || "Unknown User";
       if (chat.lastMessage) {
         chat.lastMessage._id = chat.lastMessage._id.toString();
+        // Decrypt the lastMessage content
+        try {
+          chat.lastMessage.message = decrypt(chat.lastMessage.message);
+        } catch (error) {
+          console.error(
+            `Failed to decrypt lastMessage for chat ${chat._id}:`,
+            error.message
+          );
+        }
         chat.lastMessage = chat.lastMessage.message || "Message not available";
       } else {
         chat.lastMessage = undefined;
@@ -158,11 +168,13 @@ class ChatController {
         ?.isOnline;
 
     const timestamp = new Date(); // Consistent ISO timestamp
+    const encryptedContent = encrypt(content); // Encrypt the message content
+
     const newMessage = new Message({
       recipient: recipientId,
       sender: sender._id,
       chatId: chat._id,
-      message: content,
+      message: encryptedContent,
       delivered: isRecipientOnline || false,
       isRead: false,
       timestamp: timestamp,
@@ -185,6 +197,7 @@ class ChatController {
       populatedMessage.sender._id = populatedMessage.sender._id.toString();
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
+      populatedMessage.message = decrypt(populatedMessage.message); // Decrypt for response
       populatedMessage.timestamp = timestamp.toISOString(); // Ensure ISO string
     }
 
@@ -207,85 +220,6 @@ class ChatController {
         new ApiResponse(201, populatedMessage, "Message sent successfully")
       );
   });
-
-  // sendMessage = asyncHandler(async (req, res) => {
-  //   const { chatId, content } = req.body;
-  //   const sender = req.user;
-
-  //   if (!chatId || !content) {
-  //     throw new ApiError(400, "Chat ID and message content are required");
-  //   }
-
-  //   const chat = await Chat.findOne({
-  //     _id: chatId,
-  //     participants: sender._id,
-  //   }).populate("participants", "isOnline");
-
-  //   if (!chat) {
-  //     throw new ApiError(404, "Chat not found or access denied");
-  //   }
-
-  //   const recipientId = chat.participants.find(
-  //     (p) => p._id.toString() !== sender._id.toString()
-  //   )?._id;
-  //   const isRecipientOnline =
-  //     this.onlineUsers.has(recipientId.toString()) ||
-  //     chat.participants.find((p) => p._id.toString() === recipientId.toString())
-  //       ?.isOnline;
-
-  //   const newMessage = new Message({
-  //     recipient: recipientId,
-  //     sender: sender._id,
-  //     chatId: chat._id,
-  //     message: content,
-  //     delivered: isRecipientOnline || false,
-  //     isRead: false,
-  //     timestamp: new Date(),
-  //   });
-  //   console.log(
-  //     "🚀 ~ ChatController ~ sendMessage=asyncHandler ~ newMessage:",
-  //     newMessage.timestamp
-  //   );
-
-  //   await newMessage.save();
-
-  //   chat.lastMessage = newMessage._id;
-  //   chat.updatedAt = new Date();
-  //   await chat.save();
-
-  //   const populatedMessage = await Message.findById(newMessage._id)
-  //     .populate("sender", "_id username profilePic")
-  //     .populate("recipient", "_id username profilePic")
-  //     .lean();
-
-  //   if (populatedMessage) {
-  //     populatedMessage._id = populatedMessage._id.toString();
-  //     populatedMessage.chatId = populatedMessage.chatId.toString();
-  //     populatedMessage.sender._id = populatedMessage.sender._id.toString();
-  //     populatedMessage.recipient._id =
-  //       populatedMessage.recipient._id.toString();
-  //     populatedMessage.timestamp = newMessage.timestamp;
-  //   }
-
-  //   chat.participants.forEach((participant) => {
-  //     this.io.to(participant._id.toString()).emit("newMessage", {
-  //       chatId: chatId.toString(),
-  //       message: populatedMessage,
-  //     });
-  //   });
-
-  //   if (isRecipientOnline) {
-  //     this.io.to(recipientId.toString()).emit("messageDelivered", {
-  //       messageId: newMessage._id.toString(),
-  //     });
-  //   }
-
-  //   return res
-  //     .status(201)
-  //     .json(
-  //       new ApiResponse(201, populatedMessage, "Message sent successfully")
-  //     );
-  // });
 
   getChatById = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
@@ -349,6 +283,7 @@ class ChatController {
         ...message.recipient,
         _id: message.recipient._id.toString(),
       },
+      message: decrypt(message.message),
       timestamp: message.timestamp,
     }));
 

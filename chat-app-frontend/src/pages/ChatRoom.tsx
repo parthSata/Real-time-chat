@@ -160,6 +160,7 @@ const ChatRoom: React.FC = () => {
     return data.message;
   };
 
+  // ChatRoom.js
   const fetchMessages = async (chatId: string): Promise<Message[]> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
       method: 'GET',
@@ -175,11 +176,32 @@ const ChatRoom: React.FC = () => {
     }
     return (data.message || []).map((msg: Message) => ({
       ...msg,
-      timestamp: new Date(msg.timestamp), // Parse ISO string to Date
-      delivered: msg.delivered ?? false, // Default to false if undefined
-      isRead: msg.isRead ?? false, // Default to false if undefined
+      timestamp: new Date(msg.timestamp),
+      delivered: msg.delivered ?? false,
+      isRead: msg.isRead ?? false,
     }));
   };
+
+  // const fetchMessages = async (chatId: string): Promise<Message[]> => {
+  //   const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
+  //     method: 'GET',
+  //     credentials: 'include',
+  //   });
+  //   const data = await response.json();
+  //   if (!response.ok) {
+  //     console.error('Fetch messages error:', data);
+  //     throw new Error(data.message || `HTTP error! Status: ${response.status}`);
+  //   }
+  //   if (!data.success) {
+  //     throw new Error(data.message || 'Failed to fetch messages');
+  //   }
+  //   return (data.message || []).map((msg: Message) => ({
+  //     ...msg,
+  //     timestamp: new Date(msg.timestamp), // Parse ISO string to Date
+  //     delivered: msg.delivered ?? false, // Default to false if undefined
+  //     isRead: msg.isRead ?? false, // Default to false if undefined
+  //   }));
+  // };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
