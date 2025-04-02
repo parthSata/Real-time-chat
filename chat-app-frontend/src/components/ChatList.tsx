@@ -22,7 +22,7 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
     return <div className="text-white">User not authenticated</div>;
   }
 
-   return (
+  return (
     <div className="space-y-3">
       {chats.map((chat) => {
         if (!Array.isArray(chat.participants) || chat.participants.length !== 2) {
@@ -67,16 +67,16 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
             <div className="flex items-center">
               <img
                 src={
-                  chat.participants[1].profilePic ||
+                  otherParticipant.profilePic ||
                   `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.participants[1].username}`
                 }
-                alt={chat.participants[1].username}
+                alt={otherParticipant.username}
                 className="w-12 h-12 rounded-full mr-3"
               />
               <div className="flex-1">
                 <div className="flex justify-between items-center">
                   <p className="font-medium text-foreground dark:text-white">
-                    {chat.participants[1].username}
+                    {otherParticipant.username}
                   </p>
                   <p className="text-xs text-muted-foreground dark:text-gray-400">
                     {new Date(chat.updatedAt).toLocaleTimeString([], {
