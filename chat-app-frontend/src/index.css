@@ -54,84 +54,88 @@
     @reference bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   } */
-}
 
-.chat-bubble {
-  position: relative;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
-  max-width: 80%;
-  margin-bottom: 0.5rem;
-}
+  .chat-bubble {
+    position: relative;
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    max-width: 80%;
+    margin-bottom: 0.5rem;
+    max-width: fit-content;
 
-.chat-bubble.sent {
-  background-color: #0ea5e9;
-  color: white;
-  margin-left: auto;
-  border-bottom-right-radius: 0;
-}
-
-.chat-bubble.received {
-  background-color: #e5e7eb;
-  color: #1f2937;
-  margin-right: auto;
-  border-bottom-left-radius: 0;
-}
-
-.typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.typing-indicator span {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background-color: #9ca3af;
-  animation: typing-animation 1.4s infinite ease-in-out both;
-}
-
-.typing-indicator span:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing-animation {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.6;
   }
-  40% {
-    transform: scale(1);
-    opacity: 1;
+
+  .chat-bubble.sent {
+    background-color: #0ea5e9;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 0;
   }
-}
 
-.message-input {
-  transition: all 0.3s ease;
-}
+  .chat-bubble.received {
+    background-color: #e5e7eb;
+    color: #1f2937;
+    margin-right: auto;
+    border-bottom-left-radius: 0;
+  }
 
-.message-input:focus {
-  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3);
-}
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
 
-.sidebar-link {
-  transition: all 0.2s ease;
-}
+  .typing-indicator span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background-color: #9ca3af;
+    animation: typing-animation 1.4s infinite ease-in-out both;
+  }
 
-.sidebar-link:hover {
-  background-color: rgba(14, 165, 233, 0.1);
-}
+  .typing-indicator span:nth-child(1) {
+    animation-delay: 0s;
+  }
 
-.sidebar-link.active {
-  background-color: rgba(14, 165, 233, 0.2);
-  color: #0ea5e9;
+  .typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typing-animation {
+    0%,
+    80%,
+    100% {
+      transform: scale(0.6);
+      opacity: 0.6;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .message-input {
+    transition: all 0.3s ease;
+  }
+
+  .message-input:focus {
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3);
+  }
+
+  .sidebar-link {
+    transition: all 0.2s ease;
+  }
+
+  .sidebar-link:hover {
+    background-color: rgba(14, 165, 233, 0.1);
+  }
+
+  .sidebar-link.active {
+    background-color: rgba(14, 165, 233, 0.2);
+    color: #0ea5e9;
+  }
 }
