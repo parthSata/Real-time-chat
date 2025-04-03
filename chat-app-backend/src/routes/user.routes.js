@@ -9,6 +9,7 @@ import {
   getCurrentUser,
   searchUser,
   refreshToken,
+  updateProfile,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
@@ -78,6 +79,22 @@ router.get(
   ],
   searchUser
 );
+
+// user.routes.js
+router
+  .route("/update-profile")
+  .put(
+    verifyJWT,
+    upload.fields([{ name: "profilePic", maxCount: 1 }]),
+    [
+      body("username").optional().trim().isLength({ min: 3 }),
+      body("email").optional().isEmail(),
+      body("password").optional().isLength({ min: 6 }),
+      body("status").optional().trim(),
+      validate,
+    ],
+    updateProfile
+  );
 
 router.post("/refresh-token", refreshToken);
 

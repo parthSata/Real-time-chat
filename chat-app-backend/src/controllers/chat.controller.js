@@ -134,6 +134,7 @@ class ChatController {
         ...participant,
         _id: participant._id.toString(),
       }));
+      delete chat.unreadCounts; // Remove the map from response if not needed
       return chat;
     });
 
@@ -181,6 +182,15 @@ class ChatController {
     });
 
     await newMessage.save();
+
+    // Update unread counts
+    chat.participants.forEach((participant) => {
+      const participantId = participant._id.toString();
+      if (participantId !== sender._id.toString()) {
+        const currentCount = chat.unreadCounts.get(participantId) || 0;
+        chat.unreadCounts.set(participantId, currentCount + 1);
+      }
+    });
 
     chat.lastMessage = newMessage._id;
     chat.updatedAt = new Date();
@@ -310,6 +320,14 @@ class ChatController {
       message.isRead = true;
       message.delivered = true;
       await message.save();
+
+      // Update unread count
+      const chat = await Chat.findById(message.chatId);
+      const currentCount = chat.unreadCounts.get(userId.toString()) || 0;
+      if (currentCount > 0) {
+        chat.unreadCounts.set(userId.toString(), currentCount - 1);
+        await chat.save();
+      }
 
       this.io.to(message.chatId.toString()).emit("messageRead", {
         messageId: message._id.toString(),

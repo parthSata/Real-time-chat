@@ -36,6 +36,11 @@ const ChatSchema = new mongoose.Schema(
       ref: "Message",
       default: null,
     },
+    unreadCounts: {
+      type: Map,
+      of: Number,
+      default: () => new Map(), // Stored as object in MongoDB
+    },
   },
   { timestamps: true }
 );

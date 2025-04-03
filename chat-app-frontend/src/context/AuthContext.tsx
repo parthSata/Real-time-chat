@@ -20,6 +20,13 @@ interface AuthContextType {
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
   socket: Socket | null;
+  updateProfile: (data: {
+    username?: string;
+    email?: string;
+    password?: string; // Added password
+    profilePic?: File;
+    status?: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,12 +48,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [socket, setSocket] = useState<Socket | null>(null);
-  const hasCheckedSession = useRef(false); // Ref to track if session has been checked
+  const hasCheckedSession = useRef(false);
 
   const checkSession = async () => {
     if (hasCheckedSession.current) {
       console.log('Session already checked, skipping...');
-      return; // Prevent repeated calls
+      return;
     }
 
     try {
@@ -54,7 +61,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         withCredentials: true,
       });
       if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message, id: String(response.data.message.user._id) };
+        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
         setUser(newUser);
         setIsAuthenticated(true);
       } else {
@@ -75,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             withCredentials: true,
           });
           if (retryResponse.data.success && retryResponse.data.message) {
-            const newUser = { ...retryResponse.data.message, id: String(retryResponse.data.message._id) };
+            const newUser = { ...retryResponse.data.message.user, id: String(retryResponse.data.message.user._id) };
             setUser(newUser);
             setIsAuthenticated(true);
           } else {
@@ -93,16 +100,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } finally {
       setLoading(false);
-      hasCheckedSession.current = true; // Mark session as checked
+      hasCheckedSession.current = true;
     }
   };
 
-  // Run checkSession only once on initial mount
   useEffect(() => {
     checkSession();
-  }, []); // Empty dependency array ensures it runs only once
+  }, []);
 
-  // Socket connection effect
   useEffect(() => {
     if (!isAuthenticated || !user) {
       if (socket) {
@@ -132,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       newSocket.disconnect();
       setSocket(null);
     };
-  }, [isAuthenticated, user?.id]); // Depend only on isAuthenticated and user.id
+  }, [isAuthenticated, user?.id]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -142,10 +147,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { withCredentials: true }
       );
       if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message, id: String(response.data.message._id) };
+        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
         setUser(newUser);
         setIsAuthenticated(true);
-        hasCheckedSession.current = true; // Mark session as checked after login
+        hasCheckedSession.current = true;
       } else {
         throw new Error('Login failed');
       }
@@ -171,10 +176,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message, id: String(response.data.message._id) };
+        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
         setUser(newUser);
         setIsAuthenticated(true);
-        hasCheckedSession.current = true; // Mark session as checked after registration
+        hasCheckedSession.current = true;
       } else {
         throw new Error('Registration failed');
       }
@@ -188,15 +193,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await axios.post('http://localhost:3000/api/v1/users/logout', {}, { withCredentials: true });
       setUser(null);
       setIsAuthenticated(false);
-      hasCheckedSession.current = false; // Allow session check on next mount
+      hasCheckedSession.current = false;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Logout failed');
     }
   };
 
+  const updateProfile = async (data: {
+    username?: string;
+    email?: string;
+    password?: string;
+    profilePic?: File;
+    status?: string;
+  }) => {
+    try {
+      const formData = new FormData();
+      if (data.username) formData.append('username', data.username);
+      if (data.email) formData.append('email', data.email);
+      if (data.password) formData.append('password', data.password); // Add password support
+      if (data.profilePic) formData.append('profilePic', data.profilePic);
+      if (data.status) formData.append('status', data.status);
+
+      const response = await axios.put(
+        'http://localhost:3000/api/v1/users/update-profile', // Updated endpoint
+        formData,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      );
+
+      // Check the response structure and update user
+      if (response.data.success && response.data.data) {
+        const updatedUser = { ...response.data.data, id: String(response.data.data._id) };
+        setUser(updatedUser);
+      } else {
+        throw new Error('Profile update failed: Invalid response structure');
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Profile update failed');
+    }
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, loading, login, register, logout, checkSession, socket }}
+      value={{ user, isAuthenticated, loading, login, register, logout, checkSession, socket, updateProfile }}
     >
       {children}
     </AuthContext.Provider>

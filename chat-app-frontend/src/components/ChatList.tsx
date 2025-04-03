@@ -13,9 +13,10 @@ interface Chat {
 
 interface ChatListProps {
   chats: Chat[];
+  onChatSelect?: (chatId: string) => void;
 }
 
-const ChatList: React.FC<ChatListProps> = ({ chats }) => {
+const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
   const { user } = useAuth();
 
   if (!user) {
@@ -30,6 +31,7 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
           return (
             <div
               key={chat._id}
+              onClick={() => onChatSelect?.(chat._id)}
               className="p-4 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400"
             >
               Invalid chat data: Incorrect number of participants
@@ -59,14 +61,21 @@ const ChatList: React.FC<ChatListProps> = ({ chats }) => {
             className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <div className="p-4 flex items-center space-x-4">
-              <img
-                src={
-                  otherParticipant.profilePic ||
-                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`
-                }
-                alt={otherParticipant.username}
-                className="w-12 h-12 rounded-full"
-              />
+              <div className="">
+                <img
+                  src={
+                    otherParticipant.profilePic ||
+                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`
+                  }
+                  alt={otherParticipant.username}
+                  className="w-12 h-12 rounded-full"
+                />
+                {chat.unread && chat.unread > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {chat.unread}
+                  </span>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between">
                   <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">

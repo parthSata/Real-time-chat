@@ -223,6 +223,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
       new ApiResponse(200, { user: userData }, "User fetched successfully")
     );
 });
+
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
@@ -245,6 +246,35 @@ const searchUser = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json(new ApiResponse(200, user, "User found"));
+});
+
+const updateProfile = asyncHandler(async (req, res) => {
+  const { username, email, password, status } = req.body;
+  const userId = req.user._id;
+
+  const updateData = {};
+  if (username) updateData.username = username;
+  if (email) updateData.email = email;
+  if (password) updateData.password = await bcrypt.hash(password, 10); // Assuming bcrypt is used
+  if (status) updateData.status = status;
+
+  if (req.files?.profilePic) {
+    const profilePicFile = req.files.profilePic[0];
+    const uploadResult = await uploadInCloudinary(profilePicFile.path);
+    if (uploadResult) {
+      updateData.profilePic = uploadResult.secure_url;
+    }
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $set: updateData },
+    { new: true, runValidators: true }
+  ).select("-password -refreshToken");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
 });
 
 // Refresh token endpoint
@@ -297,4 +327,5 @@ export {
   getCurrentUser,
   searchUser,
   refreshToken,
+  updateProfile,
 };
