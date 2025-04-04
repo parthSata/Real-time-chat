@@ -78,14 +78,47 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.getChatMessages(req, res, next)
   );
 
+  router.delete(
+    "/:chatId",
+    verifyJWT,
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    (req, res, next) => chatController.deleteChat(req, res, next)
+  );
+
+  router.delete(
+    "/:chatId/messages",
+    verifyJWT,
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      body("messageIds")
+        .isArray({ min: 1 })
+        .withMessage("Message IDs must be a non-empty array"),
+      validate,
+    ],
+    (req, res, next) => chatController.deleteMessages(req, res, next)
+  );
+
   router.post(
     "/message/read",
     verifyJWT,
-    [body("messageId").trim().isMongoId().withMessage("Message ID must be valid"), validate],
+    [
+      body("messageId")
+        .trim()
+        .isMongoId()
+        .withMessage("Message ID must be valid"),
+      validate,
+    ],
     (req, res, next) => chatController.markMessageAsRead(req, res, next)
   );
 
-  return router;  
+  return router;
 };
 
 export default initializeChatRoutes;

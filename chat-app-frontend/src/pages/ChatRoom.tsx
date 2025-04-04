@@ -46,7 +46,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
-  const formRef = useRef<HTMLFormElement>(null); // Added to control form
+  const formRef = useRef<HTMLFormElement>(null);
   const { user, isAuthenticated, socket } = useAuth();
 
   useEffect(() => {
@@ -60,10 +60,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       try {
         setLoading(true);
         setError(null);
-        const [chatData, messagesData] = await Promise.all([
-          fetchChat(chatId),
-          fetchMessages(chatId),
-        ]);
+        const [chatData, messagesData] = await Promise.all([fetchChat(chatId), fetchMessages(chatId)]);
         setChat(chatData);
         setMessages(messagesData);
       } catch (err: any) {
@@ -98,15 +95,11 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     };
 
     const handleMessageDelivered = ({ messageId }: { messageId: string }) => {
-      setMessages((prev) =>
-        prev.map((msg) => (msg._id === messageId ? { ...msg, delivered: true } : msg))
-      );
+      setMessages((prev) => prev.map((msg) => (msg._id === messageId ? { ...msg, delivered: true } : msg)));
     };
 
     const handleMessageRead = ({ messageId }: { messageId: string }) => {
-      setMessages((prev) =>
-        prev.map((msg) => (msg._id === messageId ? { ...msg, isRead: true, delivered: true } : msg))
-      );
+      setMessages((prev) => prev.map((msg) => (msg._id === messageId ? { ...msg, isRead: true, delivered: true } : msg)));
     };
 
     socket.on('newMessage', handleNewMessage);
@@ -142,24 +135,19 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         setShowOptionsMenu(false);
       }
     };
-
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   const fetchChat = async (chatId: string): Promise<Chat> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
-      credentials: 'include',
-    });
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' });
     const data = await response.json();
     if (!response.ok || !data.success) throw new Error(data.message || 'Failed to fetch chat');
     return data.message;
   };
 
   const fetchMessages = async (chatId: string): Promise<Message[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
-      credentials: 'include',
-    });
+    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' });
     const data = await response.json();
     if (!response.ok || !data.success) throw new Error(data.message || 'Failed to fetch messages');
     return (data.message || []).map((msg: Message) => ({
@@ -171,7 +159,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault(); // Prevent default form submission
+    e.preventDefault();
     if (message.trim() === '' || !chatId || !user || !chat) return;
 
     const otherParticipant = chat.participants.find((p) => p._id !== user.id);
@@ -190,7 +178,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       if (!response.ok) throw new Error((await response.json()).message || 'Failed to send message');
 
       const newMessage: Message = {
-        _id: Date.now().toString(), // Temporary ID
+        _id: Date.now().toString(),
         message,
         sender: { _id: user.id, username: user.username },
         recipient: { _id: otherParticipant._id, username: otherParticipant.username },
@@ -201,7 +189,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       };
       setMessages((prev) => [...prev, newMessage]);
       setMessage('');
-      // Reset form to prevent refresh
       if (formRef.current) formRef.current.reset();
     } catch (err: any) {
       setError(err.message);
@@ -217,10 +204,23 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     }
   };
 
-  const handleDeleteSelectedMessages = () => {
-    setMessages((prev) => prev.filter((msg) => !selectedMessages.has(msg._id)));
-    setSelectedMessages(new Set());
-    setIsSelectionMode(false);
+  const handleDeleteSelectedMessages = async () => {
+    try {
+      const messageIds = Array.from(selectedMessages);
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ messageIds }),
+      });
+      if (!response.ok) throw new Error((await response.json()).message || 'Failed to delete messages');
+
+      setMessages((prev) => prev.filter((msg) => !selectedMessages.has(msg._id)));
+      setSelectedMessages(new Set());
+      setIsSelectionMode(false);
+    } catch (err: any) {
+      setError('Failed to delete messages: ' + err.message);
+    }
   };
 
   if (error) return <div className="h-screen flex items-center justify-center text-red-600">{error}</div>;
@@ -257,9 +257,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                 <h2 className="text-lg font-medium text-gray-800 dark:text-white">{otherParticipant.username}</h2>
                 <div className="flex items-center">
                   <span className={`h-2 w-2 rounded-full ${otherParticipant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                    {otherParticipant.isOnline ? 'Online' : 'Offline'}
-                  </span>
+                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{otherParticipant.isOnline ? 'Online' : 'Offline'}</span>
                 </div>
               </div>
             </div>
@@ -282,6 +280,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                   size="sm"
                   onClick={handleDeleteSelectedMessages}
                   className="bg-red-500 hover:bg-red-600"
+                  disabled={selectedMessages.size === 0}
                 >
                   Delete ({selectedMessages.size})
                 </Button>
@@ -321,7 +320,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                             className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
                           >
                             <Trash2 size={16} className="mr-2" />
-                            Select messages
+                            Select and Delete Messages
                           </button>
                         </div>
                       </motion.div>
@@ -341,14 +340,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                 <div
                   key={msg._id}
                   onClick={() => toggleMessageSelection(msg._id)}
-                  className={`relative ${isSelectionMode ? 'cursor-pointer' : ''}`}
+                  className={`relative ${isSelectionMode ? 'cursor-pointer' : ''} bg-red`}
                 >
                   {isSelectionMode && (
                     <div
                       className={`absolute -left-6 top-1/2 transform -translate-y-1/2 w-4 h-4 rounded-full border-2 ${selectedMessages.has(msg._id)
-                          ? 'bg-[#0284c7] border-[#0284c7]'
-                          : 'border-gray-300 dark:border-gray-600'
-                        }`}
+                        ? 'bg-[#0284c7] border-[#0284c7]'
+                        : 'border-gray-300 dark:border-gray-600'
+                      }`}
                     />
                   )}
                   <ChatMessage

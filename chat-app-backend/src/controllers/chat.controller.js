@@ -338,6 +338,52 @@ class ChatController {
       .status(200)
       .json(new ApiResponse(200, null, "Message marked as read"));
   });
+
+  deleteChat = asyncHandler(async (req, res) => {
+    const { chatId } = req.params;
+    const userId = req.user._id;
+
+    const chat = await Chat.findOneAndDelete({
+      _id: chatId,
+      participants: userId,
+    });
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
+
+    this.io.to(chatId).emit("chatDeleted", { chatId });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Chat deleted successfully"));
+  });
+
+  deleteMessages = asyncHandler(async (req, res) => {
+    const { chatId } = req.params;
+    const { messageIds } = req.body;
+    const userId = req.user._id;
+
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      throw new ApiError(400, "Message IDs are required");
+    }
+
+    const chat = await Chat.findOne({ _id: chatId, participants: userId });
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
+
+    const deletedMessages = await Message.deleteMany({
+      _id: { $in: messageIds },
+      chatId,
+      sender: userId, // Only allow deleting own messages
+    });
+
+    if (deletedMessages.deletedCount === 0) {
+      throw new ApiError(404, "No messages found to delete");
+    }
+
+    this.io.to(chatId).emit("messagesDeleted", { chatId, messageIds });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Messages deleted successfully"));
+  });
 }
 
 const initializeChatSocket = (io, onlineUsers) => {
