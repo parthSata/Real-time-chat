@@ -70,11 +70,6 @@ const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
                   alt={otherParticipant.username}
                   className="w-12 h-12 rounded-full"
                 />
-                {chat.unread && chat.unread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {chat.unread}
-                  </span>
-                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between">

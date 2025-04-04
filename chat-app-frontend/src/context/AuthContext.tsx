@@ -23,7 +23,7 @@ interface AuthContextType {
   updateProfile: (data: {
     username?: string;
     email?: string;
-    password?: string; // Added password
+    password?: string;
     profilePic?: File;
     status?: string;
   }) => Promise<void>;
@@ -77,7 +77,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             {},
             { withCredentials: true }
           );
-          console.log("🚀 ~ checkSession ~ refreshResponse:", refreshResponse)
+          console.log("🚀 ~ checkSession ~ refreshResponse:", refreshResponse);
           const retryResponse = await axios.get('http://localhost:3000/api/v1/users/me', {
             withCredentials: true,
           });
@@ -210,12 +210,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const formData = new FormData();
       if (data.username) formData.append('username', data.username);
       if (data.email) formData.append('email', data.email);
-      if (data.password) formData.append('password', data.password); // Add password support
+      if (data.password) formData.append('password', data.password);
       if (data.profilePic) formData.append('profilePic', data.profilePic);
       if (data.status) formData.append('status', data.status);
 
       const response = await axios.put(
-        'http://localhost:3000/api/v1/users/update-profile', // Updated endpoint
+        'http://localhost:3000/api/v1/users/update-profile',
         formData,
         {
           withCredentials: true,
@@ -223,7 +223,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       );
 
-      // Check the response structure and update user
       if (response.data.success && response.data.data) {
         const updatedUser = { ...response.data.data, id: String(response.data.data._id) };
         setUser(updatedUser);

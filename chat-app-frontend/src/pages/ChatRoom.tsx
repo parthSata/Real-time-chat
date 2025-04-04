@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Send, Paperclip, Mic, Phone, Video, MoreVertical,  Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Mic, Phone, Video, MoreVertical, Trash2 } from 'lucide-react';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
-import Button from '../components/Button'; // Assuming you have this component
+import Button from '../components/Button';
 
 const API_BASE_URL = 'http://localhost:3000';
 
@@ -46,9 +46,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null); // Added to control form
   const { user, isAuthenticated, socket } = useAuth();
 
-  // Load chat and messages
   useEffect(() => {
     if (!isAuthenticated || !chatId || !/^[0-9a-fA-F]{24}$/.test(chatId)) {
       setError('Invalid chat ID or not authenticated');
@@ -77,7 +77,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     loadChat();
   }, [chatId, isAuthenticated, onClose]);
 
-  // Socket event listeners
   useEffect(() => {
     if (!socket || !chatId || !user) return;
 
@@ -86,6 +85,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     const handleNewMessage = ({ chatId: incomingChatId, message }: { chatId: string; message: Message }) => {
       if (incomingChatId === chatId) {
         setMessages((prev) => {
+          const tempIdx = prev.findIndex((msg) => msg._id === Date.now().toString());
+          if (tempIdx !== -1) {
+            const updatedMessages = [...prev];
+            updatedMessages[tempIdx] = { ...message, timestamp: new Date(message.timestamp) };
+            return updatedMessages;
+          }
           if (prev.some((msg) => msg._id === message._id)) return prev;
           return [...prev, { ...message, timestamp: new Date(message.timestamp) }];
         });
@@ -116,7 +121,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     };
   }, [socket, chatId, user]);
 
-  // Mark messages as read
   useEffect(() => {
     if (!socket || !chat || !user || loading) return;
 
@@ -126,14 +130,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     });
   }, [messages, chat, user, socket, chatId, loading]);
 
-  // Scroll to bottom
   useLayoutEffect(() => {
     if (!loading && messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [loading, messages]);
 
-  // Handle click outside options menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
@@ -169,8 +171,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (message.trim() === '' || !chatId) return;
+    e.preventDefault(); // Prevent default form submission
+    if (message.trim() === '' || !chatId || !user || !chat) return;
+
+    const otherParticipant = chat.participants.find((p) => p._id !== user.id);
+    if (!otherParticipant) {
+      setError('No other participant found');
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/chats/message`, {
@@ -180,7 +188,21 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         body: JSON.stringify({ chatId, content: message }),
       });
       if (!response.ok) throw new Error((await response.json()).message || 'Failed to send message');
+
+      const newMessage: Message = {
+        _id: Date.now().toString(), // Temporary ID
+        message,
+        sender: { _id: user.id, username: user.username },
+        recipient: { _id: otherParticipant._id, username: otherParticipant.username },
+        chatId,
+        timestamp: new Date(),
+        delivered: otherParticipant.isOnline,
+        isRead: false,
+      };
+      setMessages((prev) => [...prev, newMessage]);
       setMessage('');
+      // Reset form to prevent refresh
+      if (formRef.current) formRef.current.reset();
     } catch (err: any) {
       setError(err.message);
     }
@@ -189,22 +211,18 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const toggleMessageSelection = (messageId: string) => {
     if (isSelectionMode) {
       const newSelected = new Set(selectedMessages);
-      if (newSelected.has(messageId)) {
-        newSelected.delete(messageId);
-      } else {
-        newSelected.add(messageId);
-      }
+      if (newSelected.has(messageId)) newSelected.delete(messageId);
+      else newSelected.add(messageId);
       setSelectedMessages(newSelected);
     }
   };
 
   const handleDeleteSelectedMessages = () => {
-    setMessages(prev => prev.filter(msg => !selectedMessages.has(msg._id)));
+    setMessages((prev) => prev.filter((msg) => !selectedMessages.has(msg._id)));
     setSelectedMessages(new Set());
     setIsSelectionMode(false);
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Loading chat...</div>;
   if (error) return <div className="h-screen flex items-center justify-center text-red-600">{error}</div>;
   if (!chat || !user) return <div className="h-screen flex items-center justify-center">Chat or user not found.</div>;
 
@@ -270,18 +288,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               </>
             ) : (
               <>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-                >
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700">
                   <Phone size={20} />
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-                >
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700">
                   <Video size={20} />
                 </motion.button>
                 <div className="relative">
@@ -323,7 +333,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
           </div>
         </div>
       </header>
-
       <main className="flex-1 p-4 overflow-y-auto">
         <div className="max-w-3xl mx-auto">
           <div className="space-y-1">
@@ -336,11 +345,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                 >
                   {isSelectionMode && (
                     <div
-                      className={`absolute -left-6 top-1/2 transform -translate-y-1/2 w-4 h-4 rounded-full border-2 ${
-                        selectedMessages.has(msg._id)
+                      className={`absolute -left-6 top-1/2 transform -translate-y-1/2 w-4 h-4 rounded-full border-2 ${selectedMessages.has(msg._id)
                           ? 'bg-[#0284c7] border-[#0284c7]'
                           : 'border-gray-300 dark:border-gray-600'
-                      }`}
+                        }`}
                     />
                   )}
                   <ChatMessage
@@ -361,16 +369,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
           </div>
         </div>
       </main>
-
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
-        <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto">
+        <form ref={formRef} onSubmit={handleSendMessage} className="max-w-3xl mx-auto">
           <div className="flex items-center space-x-2">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-            >
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700">
               <Paperclip size={20} />
             </motion.button>
             <input
@@ -381,21 +383,11 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               className="flex-1 py-2 px-4 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:text-white"
             />
             {message.trim() === '' ? (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                type="button"
-                className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-              >
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700">
                 <Mic size={20} />
               </motion.button>
             ) : (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                type="submit"
-                className="p-2 rounded-full bg-[#0284c7] text-white"
-              >
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="submit" className="p-2 rounded-full bg-[#0284c7] text-white">
                 <Send size={20} />
               </motion.button>
             )}

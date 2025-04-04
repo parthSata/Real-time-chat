@@ -31,7 +31,7 @@ interface Chat {
   isGroupChat: boolean;
   messages?: string[];
   chatName: string;
-  __v?: number;
+  unreadCounts?: { [userId: string]: number };
   unread?: number;
   onContextMenu?: (e: React.MouseEvent) => void;
   onClick?: () => void;
@@ -86,6 +86,7 @@ const Dashboard: React.FC = () => {
             isGroupChat: chat.isGroupChat ?? false,
             createdAt: chat.createdAt || new Date().toISOString(),
             chatName: chat.chatName || 'Unknown Chat',
+            unread: 0, // Default to 0, only update on new message
           }));
           setChats(fetchedChats);
           setError('');
@@ -124,36 +125,49 @@ const Dashboard: React.FC = () => {
   }, [searchQuery, chats, currentUser]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user) return;
 
     socket.on('newChat', (chat: Chat) => {
       setChats((prev) => {
         if (prev.some((existingChat) => existingChat._id === chat._id)) {
           return prev;
         }
-        return [{ ...chat, isGroupChat: chat.isGroupChat ?? false, createdAt: chat.createdAt || new Date().toISOString(), chatName: chat.chatName || 'Unknown Chat' }, ...prev];
+        return [{ ...chat, unread: 0, isGroupChat: chat.isGroupChat ?? false, createdAt: chat.createdAt || new Date().toISOString(), chatName: chat.chatName || 'Unknown Chat' }, ...prev];
       });
     });
 
     socket.on('newMessage', (data: { chatId: string; message: Message }) => {
       setChats((prev) =>
         prev.map((chat) =>
-          chat._id === data.chatId
+          chat._id === data.chatId && data.message.sender._id !== user.id
             ? {
               ...chat,
               lastMessage: data.message.message,
               updatedAt: data.message.timestamp,
+              unread: (chat.unread || 0) + 1, // Only increment on new message
             }
             : chat
         )
       );
     });
 
+    socket.on('messageRead', ({ messageId }: { messageId: string }) => {
+      setChats((prev) =>
+        prev.map((chat) => {
+          if (chat.messages?.includes(messageId) && chat.unread && chat.unread > 0) {
+            return { ...chat, unread: chat.unread - 1 }; // Decrement and remove if 0
+          }
+          return chat;
+        })
+      );
+    });
+
     return () => {
       socket.off('newChat');
       socket.off('newMessage');
+      socket.off('messageRead');
     };
-  }, [socket]);
+  }, [socket, user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -218,11 +232,7 @@ const Dashboard: React.FC = () => {
       }
       const data: { success: boolean; data: string; message: Chat } = await response.json();
       if (data.success) {
-        const newChat = { ...data.message, isGroupChat: data.message.isGroupChat ?? false, createdAt: data.message.createdAt || new Date().toISOString(), chatName: data.message.chatName || 'Unknown Chat' };
-        if (!newChat || !newChat._id) {
-          setError('Failed to create chat: Invalid chat ID');
-          return;
-        }
+        const newChat = { ...data.message, unread: 0, isGroupChat: data.message.isGroupChat ?? false, createdAt: data.message.createdAt || new Date().toISOString(), chatName: data.message.chatName || 'Unknown Chat' };
         setChats((prev) => {
           if (prev.some((chat) => chat._id === newChat._id)) {
             return prev;
@@ -251,11 +261,7 @@ const Dashboard: React.FC = () => {
 
   const handleContextMenu = (e: React.MouseEvent, chatId: string) => {
     e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      chatId,
-    });
+    setContextMenu({ x: e.clientX, y: e.clientY, chatId });
   };
 
   const handleDeleteChat = (chatId: string) => {
@@ -287,8 +293,6 @@ const Dashboard: React.FC = () => {
     <AnimatedPage>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-
-        {/* Enhanced Chat List Panel */}
         <div className="w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <header className="bg-white dark:bg-gray-800 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
@@ -338,13 +342,12 @@ const Dashboard: React.FC = () => {
                   placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-gray-100  border-none focus:ring-2 focus:ring-[#0284c7] transition-all duration-200"
+                  className="pl-10 bg-gray-100 border-none focus:ring-2 focus:ring-[#0284c7] transition-all duration-200"
                   fullWidth
                 />
               </div>
             </div>
           </header>
-
           <div className="h-[calc(100vh-8rem)] overflow-y-auto">
             {error && (
               <motion.div
@@ -394,11 +397,9 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* Enhanced Chat Room Panel */}
         <div className="hidden md:block md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900">
           {selectedChatId ? (
-            <ChatRoom chatId={selectedChatId} onClose={() => setSelectedChatId(null)} />
+            <ChatRoom key={selectedChatId} chatId={selectedChatId} onClose={() => setSelectedChatId(null)} />
           ) : (
             <motion.div
               initial={{ opacity: 0 }}
@@ -419,8 +420,6 @@ const Dashboard: React.FC = () => {
             </motion.div>
           )}
         </div>
-
-        {/* Enhanced Context Menu */}
         <AnimatePresence>
           {contextMenu && (
             <motion.div
@@ -428,12 +427,7 @@ const Dashboard: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              style={{
-                position: 'fixed',
-                top: contextMenu.y,
-                left: contextMenu.x,
-                zIndex: 50,
-              }}
+              style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 50 }}
               className="bg-white dark:bg-gray-800 rounded-lg shadow-xl py-1 min-w-[160px] border border-gray-200 dark:border-gray-700"
             >
               <button
@@ -446,8 +440,6 @@ const Dashboard: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Profile Dialog Integration */}
         <ProfileDialog
           isOpen={isProfileDialogOpen}
           onClose={() => setIsProfileDialogOpen(false)}
