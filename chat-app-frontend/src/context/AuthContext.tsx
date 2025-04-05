@@ -57,19 +57,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
+      setLoading(true);
       const response = await axios.get('http://localhost:3000/api/v1/users/me', {
         withCredentials: true,
       });
-      if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
+
+      if (
+        response.data.success &&
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === 'string'
+      ) {
+        const newUser = {
+          id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
+        };
+        console.log('Session check - User ID:', newUser.id);
         setUser(newUser);
         setIsAuthenticated(true);
       } else {
+        console.error('Session check failed: Invalid user data', response.data);
         setUser(null);
         setIsAuthenticated(false);
       }
     } catch (error: any) {
-      console.error('Session check failed:', error.message);
+      console.error('Session check error:', error.message);
       if (error.response?.status === 401) {
         try {
           const refreshResponse = await axios.post(
@@ -77,15 +92,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             {},
             { withCredentials: true }
           );
-          console.log("🚀 ~ checkSession ~ refreshResponse:", refreshResponse);
+          console.log('Token refresh response:', refreshResponse.data);
+
           const retryResponse = await axios.get('http://localhost:3000/api/v1/users/me', {
             withCredentials: true,
           });
-          if (retryResponse.data.success && retryResponse.data.message) {
-            const newUser = { ...retryResponse.data.message.user, id: String(retryResponse.data.message.user._id) };
+
+          if (
+            retryResponse.data.success &&
+            retryResponse.data.message?.user?._id &&
+            typeof retryResponse.data.message.user._id === 'string'
+          ) {
+            const newUser = {
+              id: retryResponse.data.message.user._id,
+              username: retryResponse.data.message.user.username,
+              email: retryResponse.data.message.user.email,
+              profilePic: retryResponse.data.message.user.profilePic,
+              status: retryResponse.data.message.user.status,
+              isOnline: retryResponse.data.message.user.isOnline,
+            };
+            console.log('Retry session - User ID:', newUser.id);
             setUser(newUser);
             setIsAuthenticated(true);
           } else {
+            console.error('Retry session failed: Invalid user data', retryResponse.data);
             setUser(null);
             setIsAuthenticated(false);
           }
@@ -109,7 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
+    if (!isAuthenticated || !user || !user.id) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -124,6 +154,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     newSocket.on('connect', () => {
       console.log('Socket connected:', newSocket.id);
+      console.log('Joining socket with User ID:', user.id);
       newSocket.emit('join', user.id);
     });
 
@@ -131,7 +162,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('Socket disconnected');
     });
 
-    // Broadcast online/offline status to other users
     newSocket.on('userOnline', (userId: string) => {
       console.log(`User ${userId} is online`);
     });
@@ -155,13 +185,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { email, password },
         { withCredentials: true }
       );
-      if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
+      if (
+        response.data.success &&
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === 'string'
+      ) {
+        const newUser = {
+          id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
+        };
+        console.log('Login - User ID:', newUser.id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
       } else {
-        throw new Error('Login failed');
+        throw new Error('Login failed: Invalid user data');
       }
     } catch (error: any) {
       if (error.response?.status === 401) {
@@ -184,13 +226,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         withCredentials: true,
       });
 
-      if (response.data.success && response.data.message) {
-        const newUser = { ...response.data.message.user, id: String(response.data.message.user._id) };
+      if (
+        response.data.success &&
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === 'string'
+      ) {
+        const newUser = {
+          id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
+        };
+        console.log('Register - User ID:', newUser.id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
       } else {
-        throw new Error('Registration failed');
+        throw new Error('Registration failed: Invalid user data');
       }
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Registration error occurred.');
@@ -232,8 +286,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       );
 
-      if (response.data.success && response.data.data) {
-        const updatedUser = { ...response.data.data, id: String(response.data.data._id) };
+      if (
+        response.data.success &&
+        response.data.data?._id &&
+        typeof response.data.data._id === 'string'
+      ) {
+        const updatedUser = {
+          id: response.data.data._id,
+          username: response.data.data.username,
+          email: response.data.data.email,
+          profilePic: response.data.data.profilePic,
+          status: response.data.data.status,
+          isOnline: response.data.data.isOnline,
+        };
+        console.log('Update Profile - User ID:', updatedUser.id);
         setUser(updatedUser);
       } else {
         throw new Error('Profile update failed: Invalid response structure');

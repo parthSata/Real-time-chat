@@ -102,6 +102,10 @@ class ChatController {
   getMyChats = asyncHandler(async (req, res) => {
     const currentUserId = req.user._id;
 
+    if (!mongoose.Types.ObjectId.isValid(currentUserId)) {
+      throw new ApiError(400, "Invalid user ID");
+    }
+
     const chats = await Chat.find({ participants: currentUserId })
       .populate("participants", "_id username profilePic isOnline status")
       .populate("lastMessage", "message")
@@ -117,7 +121,6 @@ class ChatController {
       chat.chatName = otherParticipant?.username || "Unknown User";
       if (chat.lastMessage) {
         chat.lastMessage._id = chat.lastMessage._id.toString();
-        // Decrypt the lastMessage content
         try {
           chat.lastMessage.message = decrypt(chat.lastMessage.message);
         } catch (error) {
@@ -134,7 +137,7 @@ class ChatController {
         ...participant,
         _id: participant._id.toString(),
       }));
-      delete chat.unreadCounts; // Remove the map from response if not needed
+      delete chat.unreadCounts;
       return chat;
     });
 
@@ -151,6 +154,14 @@ class ChatController {
       throw new ApiError(400, "Chat ID and message content are required");
     }
 
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      throw new ApiError(400, "Invalid chat ID");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(sender._id)) {
+      throw new ApiError(400, "Invalid sender ID");
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
       participants: sender._id,
@@ -163,13 +174,25 @@ class ChatController {
     const recipientId = chat.participants.find(
       (p) => p._id.toString() !== sender._id.toString()
     )?._id;
+
+    if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
+      throw new ApiError(400, "Invalid recipient ID");
+    }
+
+    console.log(
+      "Sender ID:",
+      sender._id.toString(),
+      "Recipient ID:",
+      recipientId.toString()
+    ); // Debug log
+
     const isRecipientOnline =
       this.onlineUsers.has(recipientId.toString()) ||
       chat.participants.find((p) => p._id.toString() === recipientId.toString())
         ?.isOnline;
 
-    const timestamp = new Date(); // Consistent ISO timestamp
-    const encryptedContent = encrypt(content); // Encrypt the message content
+    const timestamp = new Date();
+    const encryptedContent = encrypt(content);
 
     const newMessage = new Message({
       recipient: recipientId,
@@ -183,7 +206,6 @@ class ChatController {
 
     await newMessage.save();
 
-    // Update unread counts
     chat.participants.forEach((participant) => {
       const participantId = participant._id.toString();
       if (participantId !== sender._id.toString()) {
@@ -207,8 +229,8 @@ class ChatController {
       populatedMessage.sender._id = populatedMessage.sender._id.toString();
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
-      populatedMessage.message = decrypt(populatedMessage.message); // Decrypt for response
-      populatedMessage.timestamp = timestamp.toISOString(); // Ensure ISO string
+      populatedMessage.message = decrypt(populatedMessage.message);
+      populatedMessage.timestamp = timestamp.toISOString();
     }
 
     chat.participants.forEach((participant) => {
@@ -266,6 +288,10 @@ class ChatController {
     const { chatId } = req.params;
     const userId = req.user._id;
 
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      throw new ApiError(400, "Invalid chat ID");
+    }
+
     const chat = await Chat.findOne({
       _id: chatId,
       participants: userId,
@@ -308,6 +334,10 @@ class ChatController {
     const { messageId } = req.body;
     const userId = req.user._id;
 
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      throw new ApiError(400, "Invalid message ID");
+    }
+
     const message = await Message.findOne({
       _id: messageId,
       recipient: userId,
@@ -321,7 +351,6 @@ class ChatController {
       message.delivered = true;
       await message.save();
 
-      // Update unread count
       const chat = await Chat.findById(message.chatId);
       const currentCount = chat.unreadCounts.get(userId.toString()) || 0;
       if (currentCount > 0) {
@@ -343,6 +372,10 @@ class ChatController {
     const { chatId } = req.params;
     const userId = req.user._id;
 
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      throw new ApiError(400, "Invalid chat ID");
+    }
+
     const chat = await Chat.findOneAndDelete({
       _id: chatId,
       participants: userId,
@@ -361,8 +394,16 @@ class ChatController {
     const { messageIds } = req.body;
     const userId = req.user._id;
 
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      throw new ApiError(400, "Invalid chat ID");
+    }
+
     if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
       throw new ApiError(400, "Message IDs are required");
+    }
+
+    if (!messageIds.every((id) => mongoose.Types.ObjectId.isValid(id))) {
+      throw new ApiError(400, "Invalid message ID in list");
     }
 
     const chat = await Chat.findOne({ _id: chatId, participants: userId });
@@ -371,7 +412,7 @@ class ChatController {
     const deletedMessages = await Message.deleteMany({
       _id: { $in: messageIds },
       chatId,
-      sender: userId, // Only allow deleting own messages
+      sender: userId,
     });
 
     if (deletedMessages.deletedCount === 0) {
@@ -391,11 +432,14 @@ const initializeChatSocket = (io, onlineUsers) => {
 
   io.on("connection", (socket) => {
     socket.on("join", async (userId) => {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        console.error("Invalid userId on socket join:", userId);
+        return;
+      }
       onlineUsers.set(socket.id, userId);
       socket.join(userId);
       console.log(`User ${userId} joined with socket ${socket.id}`);
 
-      // Fetch all chats for this user to notify participants
       const chats = await Chat.find({ participants: userId });
       chats.forEach((chat) => {
         chat.participants.forEach((participantId) => {
@@ -407,15 +451,25 @@ const initializeChatSocket = (io, onlineUsers) => {
     });
 
     socket.on("joinChat", (chatId) => {
-      socket.join(chatId);
+      if (mongoose.Types.ObjectId.isValid(chatId)) {
+        socket.join(chatId);
+      }
     });
 
     socket.on("leaveChat", (chatId) => {
-      socket.leave(chatId);
+      if (mongoose.Types.ObjectId.isValid(chatId)) {
+        socket.leave(chatId);
+      }
     });
 
     socket.on("markAsRead", async ({ chatId, messageId }) => {
       const userId = onlineUsers.get(socket.id);
+      if (
+        !mongoose.Types.ObjectId.isValid(userId) ||
+        !mongoose.Types.ObjectId.isValid(messageId)
+      ) {
+        return;
+      }
       const message = await Message.findOne({
         _id: messageId,
         recipient: userId,
@@ -436,7 +490,6 @@ const initializeChatSocket = (io, onlineUsers) => {
         onlineUsers.delete(socket.id);
         console.log(`User ${userId} disconnected`);
 
-        // Notify all relevant chat participants
         const chats = await Chat.find({ participants: userId });
         chats.forEach((chat) => {
           chat.participants.forEach((participantId) => {

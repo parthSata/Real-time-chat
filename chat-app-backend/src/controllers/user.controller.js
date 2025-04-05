@@ -5,8 +5,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt"; // Added missing import
 
-// Register a new user
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, status, isOnline, lastSeen } = req.body;
 
@@ -48,7 +48,6 @@ const registerUser = asyncHandler(async (req, res) => {
         "Error uploading profile picture to Cloudinary:",
         error.message
       );
-      // Continue without the profile picture
     }
   }
 
@@ -59,16 +58,14 @@ const registerUser = asyncHandler(async (req, res) => {
   const newUser = new User(userData);
   console.log("Saving new user to MongoDB Atlas...");
   await newUser.save();
-  console.log("User saved successfully:", newUser._id);
+  console.log("User saved successfully:", newUser._id.toString());
 
   const accessToken = newUser.generateAccessToken();
   const refreshToken = newUser.generateRefreshToken();
 
   newUser.accessToken = accessToken;
   newUser.refreshToken = refreshToken;
-  console.log("Saving access and refresh tokens...");
   await newUser.save();
-  console.log("Tokens saved successfully");
 
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
@@ -85,10 +82,10 @@ const registerUser = asyncHandler(async (req, res) => {
   });
 
   const userResponse = {
-    id: newUser._id,
+    _id: newUser._id.toString(), // Ensure _id is a string
     username: newUser.username,
     email: newUser.email,
-    profilePic: newUser.profilePic,
+    profilePic: newUser.profilePic || "",
     status: newUser.status,
     isOnline: newUser.isOnline,
   };
@@ -104,7 +101,6 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// Log in a user
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -144,15 +140,17 @@ const loginUser = asyncHandler(async (req, res) => {
   };
 
   const loggedInUser = {
-    id: user._id,
+    _id: user._id.toString(), // Ensure _id is a string
     username: user.username,
     email: user.email,
-    profilePic: user.profilePic,
+    profilePic: user.profilePic || "",
     status: user.status,
     isOnline: user.isOnline,
   };
 
-  console.log(`Login successful for email: ${email}`);
+  console.log(
+    `Login successful for email: ${email}, User ID: ${loggedInUser._id}`
+  );
   return res
     .status(200)
     .cookie("accessToken", accessToken, {
@@ -172,7 +170,6 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-// Log out the current user
 const logoutUser = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
   if (userId) {
@@ -209,7 +206,6 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "User not authenticated");
   }
 
-  // Optionally, fetch the user from the database to ensure the data is fresh
   const userData = await User.findById(user._id).select(
     "-password -refreshToken"
   );
@@ -217,10 +213,19 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
+  const userResponse = {
+    _id: userData._id.toString(), // Ensure _id is a string
+    username: userData.username,
+    email: userData.email,
+    profilePic: userData.profilePic || "",
+    status: userData.status,
+    isOnline: userData.isOnline,
+  };
+
   return res
     .status(200)
     .json(
-      new ApiResponse(200, { user: userData }, "User fetched successfully")
+      new ApiResponse(200, { user: userResponse }, "User fetched successfully")
     );
 });
 
@@ -232,7 +237,6 @@ const searchUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Username query parameter is required");
   }
 
-  // Perform a case-insensitive search
   const user = await User.findOne({
     username: { $regex: `^${username}$`, $options: "i" },
   }).select("-password");
@@ -245,7 +249,16 @@ const searchUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Cannot search for yourself");
   }
 
-  return res.status(200).json(new ApiResponse(200, user, "User found"));
+  const userResponse = {
+    _id: user._id.toString(),
+    username: user.username,
+    email: user.email,
+    profilePic: user.profilePic || "",
+    status: user.status,
+    isOnline: user.isOnline,
+  };
+
+  return res.status(200).json(new ApiResponse(200, userResponse, "User found"));
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
@@ -255,7 +268,7 @@ const updateProfile = asyncHandler(async (req, res) => {
   const updateData = {};
   if (username) updateData.username = username;
   if (email) updateData.email = email;
-  if (password) updateData.password = await bcrypt.hash(password, 10); // Assuming bcrypt is used
+  if (password) updateData.password = await bcrypt.hash(password, 10);
   if (status) updateData.status = status;
 
   if (req.files?.profilePic) {
@@ -272,12 +285,24 @@ const updateProfile = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   ).select("-password -refreshToken");
 
+  if (!updatedUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const userResponse = {
+    _id: updatedUser._id.toString(),
+    username: updatedUser.username,
+    email: updatedUser.email,
+    profilePic: updatedUser.profilePic || "",
+    status: updatedUser.status,
+    isOnline: updatedUser.isOnline,
+  };
+
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
+    .json(new ApiResponse(200, userResponse, "Profile updated successfully"));
 });
 
-// Refresh token endpoint
 const refreshToken = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken) {
