@@ -390,10 +390,20 @@ const initializeChatSocket = (io, onlineUsers) => {
   const chatController = new ChatController(io, onlineUsers);
 
   io.on("connection", (socket) => {
-    socket.on("join", (userId) => {
+    socket.on("join", async (userId) => {
       onlineUsers.set(socket.id, userId);
       socket.join(userId);
       console.log(`User ${userId} joined with socket ${socket.id}`);
+
+      // Fetch all chats for this user to notify participants
+      const chats = await Chat.find({ participants: userId });
+      chats.forEach((chat) => {
+        chat.participants.forEach((participantId) => {
+          if (participantId.toString() !== userId) {
+            io.to(participantId.toString()).emit("userOnline", userId);
+          }
+        });
+      });
     });
 
     socket.on("joinChat", (chatId) => {
@@ -417,16 +427,25 @@ const initializeChatSocket = (io, onlineUsers) => {
         io.to(chatId).emit("messageRead", {
           messageId: message._id.toString(),
         });
-        console.log(
-          `Message ${messageId} marked as read by ${userId} in chat ${chatId}`
-        );
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       const userId = onlineUsers.get(socket.id);
-      onlineUsers.delete(socket.id);
-      console.log(`User ${userId} disconnected`);
+      if (userId) {
+        onlineUsers.delete(socket.id);
+        console.log(`User ${userId} disconnected`);
+
+        // Notify all relevant chat participants
+        const chats = await Chat.find({ participants: userId });
+        chats.forEach((chat) => {
+          chat.participants.forEach((participantId) => {
+            if (participantId.toString() !== userId) {
+              io.to(participantId.toString()).emit("userOffline", userId);
+            }
+          });
+        });
+      }
     });
   });
 

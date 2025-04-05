@@ -57,7 +57,7 @@ const Dashboard: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chatId: string } | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null); // For delete confirmation
+  const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
   const { user, isAuthenticated, loading, logout, socket } = useAuth();
   const navigate = useNavigate();
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -234,7 +234,6 @@ const Dashboard: React.FC = () => {
 
   const handleDeleteChat = async (chatId: string) => {
     try {
-      // Simulate an API call to delete chat (you'll need to implement this endpoint on the backend)
       const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -255,7 +254,7 @@ const Dashboard: React.FC = () => {
     setSelectedChatId(chatId);
     setChats((prev) =>
       prev.map((chat) => (chat._id === chatId ? { ...chat, unread: 0 } : chat))
-    ); // Reset unread count when chat is opened
+    );
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900"><p className="text-gray-800 dark:text-white">Loading...</p></div>;
@@ -265,7 +264,11 @@ const Dashboard: React.FC = () => {
     <AnimatedPage>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-        <div className="w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        {/* ChatList Container */}
+        <div
+          className={`w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${selectedChatId ? 'hidden md:block' : 'block'
+            }`}
+        >
           <header className="bg-white dark:bg-gray-800 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
               <div className="flex items-center">
@@ -304,7 +307,7 @@ const Dashboard: React.FC = () => {
           </header>
           <div className="h-[calc(100vh-8rem)] overflow-y-auto">
             {error && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p was:3 bg-red-100 text-red-700 rounded-md text-sm mx-4 shadow-sm">
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm mx-4 shadow-sm">
                 {error}
               </motion.div>
             )}
@@ -335,7 +338,11 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="hidden md:block md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900">
+        {/* ChatRoom Container */}
+        <div
+          className={`w-full md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900 ${selectedChatId ? 'block' : 'hidden md:block'
+            }`}
+        >
           {selectedChatId ? (
             <ChatRoom key={selectedChatId} chatId={selectedChatId} onClose={() => setSelectedChatId(null)} />
           ) : (
@@ -374,7 +381,7 @@ const Dashboard: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0  bg-opacity-50 backdrop-blur-md flex items-center justify-center z-50"
+              className="fixed inset-0 bg-opacity-50 backdrop-blur-md flex items-center justify-center z-50"
             >
               <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-80">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Delete Chat</h3>

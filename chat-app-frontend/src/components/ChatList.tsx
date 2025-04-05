@@ -75,6 +75,7 @@ const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
                   <p className="text-sm text-gray-500 italic">No messages yet</p>
                 )}
               </div>
+              {/* Only show unread badge if unread count is greater than 0 */}
               {chat.unread && chat.unread > 0 && (
                 <span className="bg-[#0284c7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {chat.unread}

@@ -131,6 +131,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('Socket disconnected');
     });
 
+    // Broadcast online/offline status to other users
+    newSocket.on('userOnline', (userId: string) => {
+      console.log(`User ${userId} is online`);
+    });
+
+    newSocket.on('userOffline', (userId: string) => {
+      console.log(`User ${userId} is offline`);
+    });
+
     setSocket(newSocket);
 
     return () => {
