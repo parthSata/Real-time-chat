@@ -1,4 +1,3 @@
-// routes/user.routes.js
 import express from "express";
 import { body, validationResult, query } from "express-validator";
 import rateLimit from "express-rate-limit";
@@ -10,11 +9,11 @@ import {
   searchUser,
   refreshToken,
   updateProfile,
+  getAllUsers,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { ApiError } from "../utils/ApiError.js";
-import multer from "multer";
 
 const router = express.Router();
 
@@ -25,29 +24,6 @@ const validate = (req, res, next) => {
   }
   next();
 };
-
-// const loginRateLimiter = rateLimit({
-//   windowMs: 60 * 1000,
-//   max: 5,
-//   message: 'Too many login attempts, please try again after a minute.',
-//   standardHeaders: true,
-//   legacyHeaders: false,
-// });
-
-// const handleUploadError = (err, req, res, next) => {
-//   if (err instanceof multer.MulterError) {
-//     return res.status(400).json({
-//       success: false,
-//       message: err.message,
-//     });
-//   } else if (err) {
-//     return res.status(400).json({
-//       success: false,
-//       message: err.message,
-//     });
-//   }
-//   next();
-// };
 
 router
   .route("/register")
@@ -80,7 +56,8 @@ router.get(
   searchUser
 );
 
-// user.routes.js
+router.get("/all", verifyJWT, getAllUsers);
+
 router
   .route("/update-profile")
   .put(

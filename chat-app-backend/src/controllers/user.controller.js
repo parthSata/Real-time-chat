@@ -1,11 +1,10 @@
-// controllers/user.controller.js
 import { User } from "../models/user.model.js";
 import { uploadInCloudinary } from "../utils/cloudinary.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt"; // Added missing import
+import bcrypt from "bcrypt";
 
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, status, isOnline, lastSeen } = req.body;
@@ -82,7 +81,7 @@ const registerUser = asyncHandler(async (req, res) => {
   });
 
   const userResponse = {
-    _id: newUser._id.toString(), // Ensure _id is a string
+    _id: newUser._id.toString(),
     username: newUser.username,
     email: newUser.email,
     profilePic: newUser.profilePic || "",
@@ -140,7 +139,7 @@ const loginUser = asyncHandler(async (req, res) => {
   };
 
   const loggedInUser = {
-    _id: user._id.toString(), // Ensure _id is a string
+    _id: user._id.toString(),
     username: user.username,
     email: user.email,
     profilePic: user.profilePic || "",
@@ -214,7 +213,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   }
 
   const userResponse = {
-    _id: userData._id.toString(), // Ensure _id is a string
+    _id: userData._id.toString(),
     username: userData.username,
     email: userData.email,
     profilePic: userData.profilePic || "",
@@ -345,6 +344,23 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 });
 
+const getAllUsers = asyncHandler(async (req, res) => {
+  const currentUserId = req.user._id;
+
+  const users = await User.find({ _id: { $ne: currentUserId } })
+    .select("_id username profilePic isOnline")
+    .lean();
+
+  const formattedUsers = users.map((user) => ({
+    ...user,
+    _id: user._id.toString(),
+  }));
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, formattedUsers, "Users fetched successfully"));
+});
+
 export {
   registerUser,
   loginUser,
@@ -353,4 +369,5 @@ export {
   searchUser,
   refreshToken,
   updateProfile,
+  getAllUsers,
 };

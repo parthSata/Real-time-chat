@@ -3,7 +3,7 @@ import axios from 'axios';
 import io, { Socket } from 'socket.io-client';
 
 interface User {
-  id: string;
+  _id: string; // Changed from 'id' to '_id' to match API
   username: string;
   email: string;
   profilePic?: string;
@@ -68,14 +68,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         typeof response.data.message.user._id === 'string'
       ) {
         const newUser = {
-          id: response.data.message.user._id,
+          _id: response.data.message.user._id,
           username: response.data.message.user.username,
           email: response.data.message.user.email,
           profilePic: response.data.message.user.profilePic,
           status: response.data.message.user.status,
           isOnline: response.data.message.user.isOnline,
         };
-        console.log('Session check - User ID:', newUser.id);
         setUser(newUser);
         setIsAuthenticated(true);
       } else {
@@ -104,14 +103,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             typeof retryResponse.data.message.user._id === 'string'
           ) {
             const newUser = {
-              id: retryResponse.data.message.user._id,
+              _id: retryResponse.data.message.user._id,
               username: retryResponse.data.message.user.username,
               email: retryResponse.data.message.user.email,
               profilePic: retryResponse.data.message.user.profilePic,
               status: retryResponse.data.message.user.status,
               isOnline: retryResponse.data.message.user.isOnline,
             };
-            console.log('Retry session - User ID:', newUser.id);
+            console.log('Retry session - User _id:', newUser._id);
             setUser(newUser);
             setIsAuthenticated(true);
           } else {
@@ -139,7 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || !user.id) {
+    if (!isAuthenticated || !user || !user._id) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -154,8 +153,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     newSocket.on('connect', () => {
       console.log('Socket connected:', newSocket.id);
-      console.log('Joining socket with User ID:', user.id);
-      newSocket.emit('join', user.id);
+      console.log('Joining socket with User _id:', user._id);
+      newSocket.emit('join', user._id);
     });
 
     newSocket.on('disconnect', () => {
@@ -176,7 +175,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       newSocket.disconnect();
       setSocket(null);
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user?._id]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -191,14 +190,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         typeof response.data.message.user._id === 'string'
       ) {
         const newUser = {
-          id: response.data.message.user._id,
+          _id: response.data.message.user._id,
           username: response.data.message.user.username,
           email: response.data.message.user.email,
           profilePic: response.data.message.user.profilePic,
           status: response.data.message.user.status,
           isOnline: response.data.message.user.isOnline,
         };
-        console.log('Login - User ID:', newUser.id);
+        console.log('Login - User _id:', newUser._id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
@@ -232,14 +231,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         typeof response.data.message.user._id === 'string'
       ) {
         const newUser = {
-          id: response.data.message.user._id,
+          _id: response.data.message.user._id,
           username: response.data.message.user.username,
           email: response.data.message.user.email,
           profilePic: response.data.message.user.profilePic,
           status: response.data.message.user.status,
           isOnline: response.data.message.user.isOnline,
         };
-        console.log('Register - User ID:', newUser.id);
+        console.log('Register - User _id:', newUser._id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
@@ -292,14 +291,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         typeof response.data.data._id === 'string'
       ) {
         const updatedUser = {
-          id: response.data.data._id,
+          _id: response.data.data._id,
           username: response.data.data.username,
           email: response.data.data.email,
           profilePic: response.data.data.profilePic,
           status: response.data.data.status,
           isOnline: response.data.data.isOnline,
         };
-        console.log('Update Profile - User ID:', updatedUser.id);
+        console.log('Update Profile - User _id:', updatedUser._id);
         setUser(updatedUser);
       } else {
         throw new Error('Profile update failed: Invalid response structure');

@@ -7,11 +7,6 @@ import Button from '../components/Button';
 
 const API_BASE_URL = 'http://localhost:3000';
 
-interface ChatRoomProps {
-  chatId: string;
-  onClose: () => void;
-}
-
 interface Participant {
   _id: string;
   username: string;
@@ -22,8 +17,8 @@ interface Participant {
 interface Message {
   _id: string;
   message: string;
-  sender: { _id: string; username: string };
-  recipient: { _id: string; username: string };
+  sender: { _id: string; username: string; profilePic?: string };
+  recipient?: { _id: string; username: string; profilePic?: string };
   chatId: string;
   timestamp: Date;
   delivered: boolean;
@@ -33,37 +28,49 @@ interface Message {
 interface Chat {
   _id: string;
   participants: Participant[];
+  isGroupChat: boolean;
+  chatName: string;
+  createdBy: string;
+}
+
+interface ChatRoomProps {
+  chatId: string;
+  onClose: () => void;
 }
 
 const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
-  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState<boolean>(false);
+  const [showParticipantsDialog, setShowParticipantsDialog] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const { user, isAuthenticated, socket } = useAuth();
+  const { user, socket } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || !chatId || !/^[0-9a-fA-F]{24}$/.test(chatId)) {
-      setError('Invalid chat ID or not authenticated');
-      onClose();
-      return;
-    }
-
     const loadChat = async () => {
       try {
         setLoading(true);
-        setError(null);
-        const [chatData, messagesData] = await Promise.all([fetchChat(chatId), fetchMessages(chatId)]);
-        setChat(chatData);
-        setMessages(messagesData);
+        const [chatResponse, messagesResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' }),
+          fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' }),
+        ]);
+        const chatData = await chatResponse.json();
+        const messagesData = await messagesResponse.json();
+
+        if (!chatData.success || !messagesData.success) throw new Error('Failed to load chat data');
+        setChat(chatData.message);
+        setMessages(messagesData.message.map((msg: Message) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        })));
       } catch (err: any) {
         setError(err.message || 'Failed to load chat');
         onClose();
@@ -71,82 +78,41 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         setLoading(false);
       }
     };
-
     loadChat();
-  }, [chatId, isAuthenticated, onClose]);
+  }, [chatId, onClose]);
 
   useEffect(() => {
     if (!socket || !chatId || !user || !chat) return;
 
     socket.emit('joinChat', chatId);
 
-    const handleNewMessage = ({ chatId: incomingChatId, message }: { chatId: string; message: Message }) => {
+    socket.on('newMessage', ({ chatId: incomingChatId, message }: { chatId: string; message: Message }) => {
       if (incomingChatId === chatId) {
-        setMessages((prev) => {
-          if (prev.some((msg) => msg._id === message._id)) return prev;
-          return [...prev, { ...message, timestamp: new Date(message.timestamp) }];
-        });
+        setMessages((prev) =>
+          prev.some((m) => m._id === message._id)
+            ? prev
+            : [...prev, { ...message, timestamp: new Date(message.timestamp) }]
+        );
       }
-    };
+    });
 
-    const handleMessageDelivered = ({ messageId }: { messageId: string }) => {
-      setMessages((prev) => prev.map((msg) => (msg._id === messageId ? { ...msg, delivered: true } : msg)));
-    };
+    socket.on('groupUpdated', (updatedChat: Chat) => {
+      if (updatedChat._id === chatId) setChat(updatedChat);
+    });
 
-    const handleMessageRead = ({ messageId }: { messageId: string }) => {
-      setMessages((prev) => prev.map((msg) => (msg._id === messageId ? { ...msg, isRead: true, delivered: true } : msg)));
-    };
-
-    const handleUserOnline = (userId: string) => {
-      setChat((prev) =>
-        prev
-          ? {
-            ...prev,
-            participants: prev.participants.map((p) =>
-              p._id === userId ? { ...p, isOnline: true } : p
-            ),
-          }
-          : prev
-      );
-    };
-
-    const handleUserOffline = (userId: string) => {
-      setChat((prev) =>
-        prev
-          ? {
-            ...prev,
-            participants: prev.participants.map((p) =>
-              p._id === userId ? { ...p, isOnline: false } : p
-            ),
-          }
-          : prev
-      );
-    };
-
-    socket.on('newMessage', handleNewMessage);
-    socket.on('messageDelivered', handleMessageDelivered);
-    socket.on('messageRead', handleMessageRead);
-    socket.on('userOnline', handleUserOnline);
-    socket.on('userOffline', handleUserOffline);
+    socket.on('messagesDeleted', ({ chatId: deletedChatId, messageIds }: { chatId: string; messageIds: string[] }) => {
+      if (deletedChatId === chatId) {
+        setMessages((prev) => prev.filter((msg) => !messageIds.includes(msg._id)));
+      }
+    });
 
     return () => {
-      socket.off('newMessage', handleNewMessage);
-      socket.off('messageDelivered', handleMessageDelivered);
-      socket.off('messageRead', handleMessageRead);
-      socket.off('userOnline', handleUserOnline);
-      socket.off('userOffline', handleUserOffline);
+      socket.off('newMessage');
+      socket.off('groupUpdated');
+      socket.off('messagesDeleted');
       socket.emit('leaveChat', chatId);
     };
   }, [socket, chatId, user, chat]);
-
-  useEffect(() => {
-    if (!socket || !chat || !user || loading) return;
-
-    const unreadMessages = messages.filter((msg) => msg.sender._id !== user.id && !msg.isRead);
-    unreadMessages.forEach((msg) => {
-      socket.emit('markAsRead', { chatId, messageId: msg._id });
-    });
-  }, [messages, chat, user, socket, chatId, loading]);
 
   useLayoutEffect(() => {
     if (!loading && messages.length > 0) {
@@ -169,28 +135,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const fetchChat = async (chatId: string): Promise<Chat> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.message || 'Failed to fetch chat');
-    return data.message;
-  };
-
-  const fetchMessages = async (chatId: string): Promise<Message[]> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.message || 'Failed to fetch messages');
-    return (data.message || []).map((msg: Message) => ({
-      ...msg,
-      timestamp: new Date(msg.timestamp),
-      delivered: msg.delivered ?? false,
-      isRead: msg.isRead ?? false,
-    }));
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '' || !chatId || !user || !chat) return;
+    if (!message.trim() || !chatId || !user || !chat) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/chats/message`, {
@@ -199,10 +146,23 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         credentials: 'include',
         body: JSON.stringify({ chatId, content: message }),
       });
-      if (!response.ok) throw new Error((await response.json()).message || 'Failed to send message');
-
+      if (!response.ok) throw new Error('Failed to send message');
       setMessage('');
-      if (formRef.current) formRef.current.reset();
+      formRef.current?.reset();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleRemoveUser = async (userId: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/remove-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ chatId, userIdToRemove: userId }),
+      });
+      if (!response.ok) throw new Error('Failed to remove user');
     } catch (err: any) {
       setError(err.message);
     }
@@ -226,9 +186,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         credentials: 'include',
         body: JSON.stringify({ messageIds }),
       });
-      if (!response.ok) throw new Error((await response.json()).message || 'Failed to delete messages');
-
-      setMessages((prev) => prev.filter((msg) => !selectedMessages.has(msg._id)));
+      if (!response.ok) throw new Error('Only USe');
       setSelectedMessages(new Set());
       setIsSelectionMode(false);
     } catch (err: any) {
@@ -237,41 +195,41 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   };
 
   if (error) return <div className="h-screen flex items-center justify-center text-red-600">{error}</div>;
-  if (!chat || !user) return <div className="h-screen flex items-center justify-center">Chat or user not found.</div>;
+  if (!chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
-  const otherParticipant = chat.participants.find((p) => p._id !== user.id);
-  if (!otherParticipant) return <div className="h-screen flex items-center justify-center">No other participant found.</div>;
-
-  const profileImage = otherParticipant.profilePic
-    ? `${otherParticipant.profilePic}`
-    : `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`;
+  const displayName = chat.isGroupChat ? chat.chatName : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <header className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center">
-            <button
-              onClick={onClose}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-            >
+            <button onClick={onClose} className="p-2 text-gray-500 hover:text-gray-600">
               <ArrowLeft size={20} />
             </button>
-            <div className="ml-3 flex items-center">
+            <div
+              className="ml-3 flex items-center cursor-pointer"
+              onClick={() => chat.isGroupChat && setShowParticipantsDialog(true)}
+            >
               <img
-                src={profileImage}
-                alt={otherParticipant.username}
-                className="w-10 h-10 rounded-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherParticipant.username}`;
-                }}
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                alt={displayName}
+                className="w-10 h-10 rounded-full"
               />
               <div className="ml-3">
-                <h2 className="text-lg font-medium text-gray-800 dark:text-white">{otherParticipant.username}</h2>
-                <div className="flex items-center">
-                  <span className={`h-2 w-2 rounded-full ${otherParticipant.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">{otherParticipant.isOnline ? 'Online' : 'Offline'}</span>
-                </div>
+                <h2 className="text-lg font-medium text-gray-800 dark:text-white">{displayName}</h2>
+                {chat.isGroupChat ? (
+                  <p className="text-xs text-gray-500">{chat.participants.length} members</p>
+                ) : (
+                  <div className="flex items-center">
+                    <span
+                      className={`h-2 w-2 rounded-full ${chat.participants.find((p) => p._id !== user._id)?.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}
+                    ></span>
+                    <span className="ml-1 text-xs text-gray-500">
+                      {chat.participants.find((p) => p._id !== user._id)?.isOnline ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -300,18 +258,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               </>
             ) : (
               <>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-                >
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
                   <Phone size={20} />
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-                >
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
                   <Video size={20} />
                 </motion.button>
                 <div className="relative">
@@ -319,11 +269,8 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                     ref={moreButtonRef}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowOptionsMenu((prev) => !prev);
-                    }}
-                    className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+                    onClick={() => setShowOptionsMenu((prev) => !prev)}
+                    className="p-2 text-gray-500 hover:text-gray-600"
                   >
                     <MoreVertical size={20} />
                   </motion.button>
@@ -334,19 +281,17 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50"
+                        className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 z-50"
                       >
                         <div className="py-1">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            onClick={() => {
                               setIsSelectionMode(true);
                               setShowOptionsMenu(false);
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100"
                           >
-                            <Trash2 size={16} className="mr-2" />
-                            Select and Delete Messages
+                            <Trash2 size={16} className="mr-2 inline" /> Select and Delete
                           </button>
                         </div>
                       </motion.div>
@@ -358,51 +303,90 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
           </div>
         </div>
       </header>
-      <main className="flex-1 p-4 overflow-y-auto">
+
+      <main className="flex-1 p-4 overflow-y-auto relative">
         <div className="max-w-3xl mx-auto">
-          <div className="space-y-1">
-            <AnimatePresence>
-              {messages.map((msg) => (
-                <div
-                  key={msg._id}
-                  onClick={() => toggleMessageSelection(msg._id)}
-                  className={`relative ${isSelectionMode ? 'cursor-pointer' : ''}`}
-                >
-                  {isSelectionMode && (
-                    <div
-                      className={`absolute -left-6 top-1/2 transform -translate-y-1/2 w-4 h-4 rounded-full border-2 ${selectedMessages.has(msg._id)
-                        ? 'bg-[#0284c7] border-[#0284c7]'
-                        : 'border-gray-300 dark:border-gray-600'
-                        }`}
-                    />
-                  )}
-                  <ChatMessage
-                    message={{
-                      id: msg._id,
-                      text: msg.message,
-                      sender: msg.sender._id,
-                      timestamp: new Date(msg.timestamp),
-                      isMe: msg.sender._id === user.id,
-                      delivered: msg.delivered,
-                      isRead: msg.isRead,
-                    }}
+          <AnimatePresence>
+            {messages.map((msg) => (
+              <div
+                key={msg._id}
+                onClick={() => toggleMessageSelection(msg._id)}
+                className={`relative mb-2 ${isSelectionMode ? 'cursor-pointer' : ''}`}
+              >
+                {isSelectionMode && (
+                  <div
+                    className={`absolute -left-6 top-1/2 transform -translate-y-1/2 w-4 h-4 rounded-full border-2 ${selectedMessages.has(msg._id) ? 'bg-[#0284c7] border-[#0284c7]' : 'border-gray-300'}`}
                   />
+                )}
+                <div className={`flex ${msg.sender._id === user._id ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-xs">
+                    {chat.isGroupChat && msg.sender._id !== user._id && (
+                      <p className="text-xs text-gray-500 mb-1">{msg.sender.username}</p>
+                    )}
+                    <ChatMessage
+                      message={{
+                        id: msg._id,
+                        text: msg.message,
+                        sender: msg.sender._id,
+                        timestamp: msg.timestamp,
+                        isMe: msg.sender._id === user._id,
+                        delivered: msg.delivered,
+                        isRead: msg.isRead,
+                      }}
+                    />
+                  </div>
                 </div>
-              ))}
-            </AnimatePresence>
-            <div ref={messagesEndRef} />
-          </div>
+              </div>
+            ))}
+          </AnimatePresence>
+          <div ref={messagesEndRef} />
         </div>
+        <AnimatePresence>
+          {showParticipantsDialog && chat.isGroupChat && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Group Members</h3>
+                  <button onClick={() => setShowParticipantsDialog(false)} className="p-2 text-gray-500 hover:text-gray-600">
+                    <ArrowLeft size={20} />
+                  </button>
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {chat.participants.map((p) => (
+                    <div key={p._id} className="flex justify-between items-center">
+                      <span className="text-gray-900 dark:text-white">{p.username}</span>
+                      {chat.createdBy === user._id && p._id !== user._id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRemoveUser(p._id)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+
+      <footer className="bg-white dark:bg-gray-800 border-t p-4">
         <form ref={formRef} onSubmit={handleSendMessage} className="max-w-3xl mx-auto">
           <div className="flex items-center space-x-2">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              type="button"
-              className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-            >
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" className="p-2 text-gray-500">
               <Paperclip size={20} />
             </motion.button>
             <input
@@ -410,24 +394,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 py-2 px-4 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-2 focus:ring-[#0284c7] dark:text-white"
+              className="flex-1 py-2 px-4 bg-gray-100 dark:bg-gray-700 rounded-full focus:outline-none dark:text-white"
             />
             {message.trim() === '' ? (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                type="button"
-                className="p-2 rounded-full text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-              >
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" className="p-2 text-gray-500">
                 <Mic size={20} />
               </motion.button>
             ) : (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                type="submit"
-                className="p-2 rounded-full bg-[#0284c7] text-white"
-              >
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="submit" className="p-2 bg-[#0284c7] text-white rounded-full">
                 <Send size={20} />
               </motion.button>
             )}

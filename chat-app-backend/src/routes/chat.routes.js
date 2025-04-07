@@ -5,7 +5,6 @@ import { ApiError } from "../utils/ApiError.js";
 
 const router = express.Router();
 
-// Middleware to handle validation errors
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -15,7 +14,6 @@ const validate = (req, res, next) => {
 };
 
 const initializeChatRoutes = (chatController) => {
-  // POST /create - Create a new chat
   router.post(
     "/create",
     verifyJWT,
@@ -29,7 +27,33 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.createChat(req, res, next)
   );
 
-  // POST /message - Send a message in a chat
+  router.post(
+    "/create-group",
+    verifyJWT,
+    [
+      body("groupName")
+        .trim()
+        .isLength({ min: 1 })
+        .withMessage("Group name is required"),
+      body("participantUsernames")
+        .isArray({ min: 1 })
+        .withMessage("At least one participant required"),
+      validate,
+    ],
+    (req, res, next) => chatController.createGroupChat(req, res, next)
+  );
+
+  router.post(
+    "/remove-user",
+    verifyJWT,
+    [
+      body("chatId").isMongoId().withMessage("Valid chat ID required"),
+      body("userIdToRemove").isMongoId().withMessage("Valid user ID required"),
+      validate,
+    ],
+    (req, res, next) => chatController.removeUserFromGroup(req, res, next)
+  );
+
   router.post(
     "/message",
     verifyJWT,
@@ -47,12 +71,10 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.sendMessage(req, res, next)
   );
 
-  // GET /my-chats - Fetch the logged-in user's chats
   router.get("/my-chats", verifyJWT, (req, res, next) =>
     chatController.getMyChats(req, res, next)
   );
 
-  // GET /:chatId - Fetch a specific chat by ID
   router.get(
     "/:chatId",
     verifyJWT,
@@ -65,7 +87,6 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.getChatById(req, res, next)
   );
 
-  // GET /:chatId/messages - Fetch messages for a specific chat
   router.get(
     "/:chatId/messages",
     verifyJWT,

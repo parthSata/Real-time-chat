@@ -10,27 +10,19 @@ import { encrypt, decrypt } from "../utils/encryption.js";
 class ChatController {
   constructor(io, onlineUsers) {
     this.io = io;
-    this.onlineUsers = onlineUsers; // Map of socket IDs to user IDs
+    this.onlineUsers = onlineUsers;
   }
 
   createChat = asyncHandler(async (req, res) => {
     const { username } = req.body;
     const currentUserId = req.user._id;
 
-    if (!username) {
-      throw new ApiError(400, "Username is required to create a chat");
-    }
-
     const targetUser = await User.findOne({
       username: { $regex: `^${username}$`, $options: "i" },
     });
-    if (!targetUser) {
-      throw new ApiError(404, "User not found");
-    }
-
-    if (targetUser._id.toString() === currentUserId.toString()) {
+    if (!targetUser) throw new ApiError(404, "User not found");
+    if (targetUser._id.toString() === currentUserId.toString())
       throw new ApiError(400, "Cannot create a chat with yourself");
-    }
 
     const existingChat = await Chat.findOne({
       participants: { $all: [currentUserId, targetUser._id], $size: 2 },
@@ -42,21 +34,11 @@ class ChatController {
         .populate("participants", "_id username profilePic isOnline status")
         .populate("lastMessage", "message")
         .lean();
-
       populatedChat._id = populatedChat._id.toString();
-      populatedChat.isGroupChat = populatedChat.isGroupChat ?? false;
-      if (populatedChat.lastMessage) {
-        populatedChat.lastMessage._id =
-          populatedChat.lastMessage._id.toString();
-        populatedChat.lastMessage = populatedChat.lastMessage.message;
-      }
-      populatedChat.participants = populatedChat.participants.map(
-        (participant) => ({
-          ...participant,
-          _id: participant._id.toString(),
-        })
-      );
-
+      populatedChat.participants = populatedChat.participants.map((p) => ({
+        ...p,
+        _id: p._id.toString(),
+      }));
       return res
         .status(200)
         .json(new ApiResponse(200, populatedChat, "Chat already exists"));
@@ -73,23 +55,11 @@ class ChatController {
       .populate("participants", "_id username profilePic isOnline status")
       .populate("lastMessage", "message")
       .lean();
-
-    if (populatedChat && populatedChat._id) {
-      populatedChat._id = populatedChat._id.toString();
-      populatedChat.isGroupChat = populatedChat.isGroupChat ?? false;
-      populatedChat.chatName = populatedChat.chatName || targetUser.username;
-      if (populatedChat.lastMessage) {
-        populatedChat.lastMessage._id =
-          populatedChat.lastMessage._id.toString();
-        populatedChat.lastMessage = populatedChat.lastMessage.message;
-      }
-      populatedChat.participants = populatedChat.participants.map(
-        (participant) => ({
-          ...participant,
-          _id: participant._id.toString(),
-        })
-      );
-    }
+    populatedChat._id = populatedChat._id.toString();
+    populatedChat.participants = populatedChat.participants.map((p) => ({
+      ...p,
+      _id: p._id.toString(),
+    }));
 
     this.io.to(currentUserId.toString()).emit("newChat", populatedChat);
     this.io.to(targetUser._id.toString()).emit("newChat", populatedChat);
@@ -99,111 +69,140 @@ class ChatController {
       .json(new ApiResponse(201, populatedChat, "Chat created successfully"));
   });
 
-  getMyChats = asyncHandler(async (req, res) => {
+  createGroupChat = asyncHandler(async (req, res) => {
+    const { groupName, participantUsernames } = req.body;
     const currentUserId = req.user._id;
 
-    if (!mongoose.Types.ObjectId.isValid(currentUserId)) {
-      throw new ApiError(400, "Invalid user ID");
+    if (
+      !groupName ||
+      !participantUsernames ||
+      !Array.isArray(participantUsernames) ||
+      participantUsernames.length < 1
+    ) {
+      throw new ApiError(
+        400,
+        "Group name and at least one participant username are required"
+      );
     }
 
-    const chats = await Chat.find({ participants: currentUserId })
-      .populate("participants", "_id username profilePic isOnline status")
-      .populate("lastMessage", "message")
-      .sort({ updatedAt: -1 })
-      .lean();
+    const participants = await User.find({
+      username: { $in: participantUsernames },
+    }).select("_id");
+    if (participants.length !== participantUsernames.length)
+      throw new ApiError(404, "One or more users not found");
 
-    const formattedChats = chats.map((chat) => {
-      const otherParticipant = chat.participants.find(
-        (p) => p._id.toString() !== currentUserId.toString()
-      );
-      chat._id = chat._id.toString();
-      chat.isGroupChat = chat.isGroupChat ?? false;
-      chat.chatName = otherParticipant?.username || "Unknown User";
-      if (chat.lastMessage) {
-        chat.lastMessage._id = chat.lastMessage._id.toString();
-        try {
-          chat.lastMessage.message = decrypt(chat.lastMessage.message);
-        } catch (error) {
-          console.error(
-            `Failed to decrypt lastMessage for chat ${chat._id}:`,
-            error.message
-          );
-        }
-        chat.lastMessage = chat.lastMessage.message || "Message not available";
-      } else {
-        chat.lastMessage = undefined;
-      }
-      chat.participants = chat.participants.map((participant) => ({
-        ...participant,
-        _id: participant._id.toString(),
-      }));
-      delete chat.unreadCounts;
-      return chat;
+    const participantIds = participants.map((p) => p._id);
+    if (!participantIds.includes(currentUserId))
+      participantIds.push(currentUserId);
+
+    const groupChat = new Chat({
+      isGroupChat: true,
+      chatName: groupName,
+      participants: participantIds,
+      createdBy: currentUserId,
+    });
+    await groupChat.save();
+
+    const populatedChat = await Chat.findById(groupChat._id)
+      .populate("participants", "_id username profilePic isOnline status")
+      .lean();
+    populatedChat._id = populatedChat._id.toString();
+    populatedChat.participants = populatedChat.participants.map((p) => ({
+      ...p,
+      _id: p._id.toString(),
+    }));
+
+    participantIds.forEach((id) => {
+      this.io.to(id.toString()).emit("newChat", populatedChat);
     });
 
     return res
+      .status(201)
+      .json(
+        new ApiResponse(201, populatedChat, "Group chat created successfully")
+      );
+  });
+
+  removeUserFromGroup = asyncHandler(async (req, res) => {
+    const { chatId, userIdToRemove } = req.body;
+    const currentUserId = req.user._id;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(chatId) ||
+      !mongoose.Types.ObjectId.isValid(userIdToRemove)
+    ) {
+      throw new ApiError(400, "Invalid chat ID or user ID");
+    }
+
+    const chat = await Chat.findOne({
+      _id: chatId,
+      isGroupChat: true,
+      createdBy: currentUserId,
+    });
+    if (!chat)
+      throw new ApiError(
+        403,
+        "Chat not found or you don't have permission to remove users"
+      );
+
+    if (
+      !chat.participants.some(
+        (id) => id.toString() === userIdToRemove.toString()
+      )
+    ) {
+      throw new ApiError(400, "User not in group");
+    }
+
+    chat.participants = chat.participants.filter(
+      (id) => id.toString() !== userIdToRemove.toString()
+    );
+    await chat.save();
+
+    const populatedChat = await Chat.findById(chatId)
+      .populate("participants", "_id username profilePic isOnline status")
+      .lean();
+    populatedChat._id = populatedChat._id.toString();
+    populatedChat.participants = populatedChat.participants.map((p) => ({
+      ...p,
+      _id: p._id.toString(),
+    }));
+
+    chat.participants.forEach((id) => {
+      this.io.to(id.toString()).emit("groupUpdated", populatedChat);
+    });
+    this.io.to(userIdToRemove.toString()).emit("removedFromGroup", { chatId });
+
+    return res
       .status(200)
-      .json(new ApiResponse(200, formattedChats, "Chats fetched successfully"));
+      .json(new ApiResponse(200, populatedChat, "User removed from group"));
   });
 
   sendMessage = asyncHandler(async (req, res) => {
     const { chatId, content } = req.body;
     const sender = req.user;
 
-    if (!chatId || !content) {
-      throw new ApiError(400, "Chat ID and message content are required");
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      throw new ApiError(400, "Invalid chat ID");
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(sender._id)) {
-      throw new ApiError(400, "Invalid sender ID");
-    }
-
     const chat = await Chat.findOne({
       _id: chatId,
       participants: sender._id,
     }).populate("participants", "isOnline");
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
 
-    if (!chat) {
-      throw new ApiError(404, "Chat not found or access denied");
-    }
-
-    const recipientId = chat.participants.find(
-      (p) => p._id.toString() !== sender._id.toString()
-    )?._id;
-
-    if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
-      throw new ApiError(400, "Invalid recipient ID");
-    }
-
-    console.log(
-      "Sender ID:",
-      sender._id.toString(),
-      "Recipient ID:",
-      recipientId.toString()
-    ); // Debug log
-
-    const isRecipientOnline =
-      this.onlineUsers.has(recipientId.toString()) ||
-      chat.participants.find((p) => p._id.toString() === recipientId.toString())
-        ?.isOnline;
-
-    const timestamp = new Date();
+    const recipientIds = chat.participants
+      .filter((p) => p._id.toString() !== sender._id.toString())
+      .map((p) => p._id);
     const encryptedContent = encrypt(content);
 
     const newMessage = new Message({
-      recipient: recipientId,
+      recipient: recipientIds[0], // For group chats, this could be null or handled differently
       sender: sender._id,
       chatId: chat._id,
       message: encryptedContent,
-      delivered: isRecipientOnline || false,
+      delivered: chat.participants.some(
+        (p) => p.isOnline && p._id.toString() !== sender._id.toString()
+      ),
       isRead: false,
-      timestamp: timestamp,
+      timestamp: new Date(),
     });
-
     await newMessage.save();
 
     chat.participants.forEach((participant) => {
@@ -213,7 +212,6 @@ class ChatController {
         chat.unreadCounts.set(participantId, currentCount + 1);
       }
     });
-
     chat.lastMessage = newMessage._id;
     chat.updatedAt = new Date();
     await chat.save();
@@ -222,16 +220,13 @@ class ChatController {
       .populate("sender", "_id username profilePic")
       .populate("recipient", "_id username profilePic")
       .lean();
-
-    if (populatedMessage) {
-      populatedMessage._id = populatedMessage._id.toString();
-      populatedMessage.chatId = populatedMessage.chatId.toString();
-      populatedMessage.sender._id = populatedMessage.sender._id.toString();
+    populatedMessage._id = populatedMessage._id.toString();
+    populatedMessage.chatId = populatedMessage.chatId.toString();
+    populatedMessage.sender._id = populatedMessage.sender._id.toString();
+    if (populatedMessage.recipient)
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
-      populatedMessage.message = decrypt(populatedMessage.message);
-      populatedMessage.timestamp = timestamp.toISOString();
-    }
+    populatedMessage.message = decrypt(populatedMessage.message);
 
     chat.participants.forEach((participant) => {
       this.io.to(participant._id.toString()).emit("newMessage", {
@@ -240,12 +235,6 @@ class ChatController {
       });
     });
 
-    if (isRecipientOnline) {
-      this.io.to(recipientId.toString()).emit("messageDelivered", {
-        messageId: newMessage._id.toString(),
-      });
-    }
-
     return res
       .status(201)
       .json(
@@ -253,31 +242,48 @@ class ChatController {
       );
   });
 
+  getMyChats = asyncHandler(async (req, res) => {
+    const currentUserId = req.user._id;
+
+    const chats = await Chat.find({ participants: currentUserId })
+      .populate("participants", "_id username profilePic isOnline status")
+      .populate("lastMessage", "message")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const formattedChats = chats.map((chat) => {
+      chat._id = chat._id.toString();
+      chat.participants = chat.participants.map((p) => ({
+        ...p,
+        _id: p._id.toString(),
+      }));
+      if (chat.lastMessage) {
+        chat.lastMessage._id = chat.lastMessage._id.toString();
+        chat.lastMessage.message = decrypt(chat.lastMessage.message);
+        chat.lastMessage = chat.lastMessage.message;
+      }
+      return chat;
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, formattedChats, "Chats fetched successfully"));
+  });
+
   getChatById = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
     const userId = req.user._id;
 
-    if (!chatId || !mongoose.Types.ObjectId.isValid(chatId)) {
-      throw new ApiError(400, "Invalid chat ID");
-    }
-
-    const chat = await Chat.findOne({
-      _id: chatId,
-      participants: userId,
-    })
+    const chat = await Chat.findOne({ _id: chatId, participants: userId })
       .populate("participants", "_id username profilePic isOnline status")
       .lean();
-
-    if (!chat) {
-      throw new ApiError(404, "Chat not found or access denied");
-    }
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
 
     chat._id = chat._id.toString();
-    chat.isGroupChat = chat.isGroupChat ?? false;
-    chat.participants = chat.participants.map((participant) => {
-      participant._id = participant._id.toString();
-      return participant;
-    });
+    chat.participants = chat.participants.map((p) => ({
+      ...p,
+      _id: p._id.toString(),
+    }));
 
     return res
       .status(200)
@@ -288,18 +294,8 @@ class ChatController {
     const { chatId } = req.params;
     const userId = req.user._id;
 
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      throw new ApiError(400, "Invalid chat ID");
-    }
-
-    const chat = await Chat.findOne({
-      _id: chatId,
-      participants: userId,
-    });
-
-    if (!chat) {
-      throw new ApiError(404, "Chat not found or access denied");
-    }
+    const chat = await Chat.findOne({ _id: chatId, participants: userId });
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
 
     const messages = await Message.find({ chatId })
       .populate("sender", "_id username profilePic")
@@ -311,16 +307,11 @@ class ChatController {
       ...message,
       _id: message._id.toString(),
       chatId: message.chatId.toString(),
-      sender: {
-        ...message.sender,
-        _id: message.sender._id.toString(),
-      },
-      recipient: {
-        ...message.recipient,
-        _id: message.recipient._id.toString(),
-      },
+      sender: { ...message.sender, _id: message.sender._id.toString() },
+      recipient: message.recipient
+        ? { ...message.recipient, _id: message.recipient._id.toString() }
+        : null,
       message: decrypt(message.message),
-      timestamp: message.timestamp,
     }));
 
     return res
@@ -334,17 +325,11 @@ class ChatController {
     const { messageId } = req.body;
     const userId = req.user._id;
 
-    if (!mongoose.Types.ObjectId.isValid(messageId)) {
-      throw new ApiError(400, "Invalid message ID");
-    }
-
     const message = await Message.findOne({
       _id: messageId,
       recipient: userId,
     });
-    if (!message) {
-      throw new ApiError(404, "Message not found or access denied");
-    }
+    if (!message) throw new ApiError(404, "Message not found or access denied");
 
     if (!message.isRead) {
       message.isRead = true;
@@ -358,9 +343,9 @@ class ChatController {
         await chat.save();
       }
 
-      this.io.to(message.chatId.toString()).emit("messageRead", {
-        messageId: message._id.toString(),
-      });
+      this.io
+        .to(message.chatId.toString())
+        .emit("messageRead", { messageId: message._id.toString() });
     }
 
     return res
@@ -371,10 +356,6 @@ class ChatController {
   deleteChat = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
     const userId = req.user._id;
-
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      throw new ApiError(400, "Invalid chat ID");
-    }
 
     const chat = await Chat.findOneAndDelete({
       _id: chatId,
@@ -394,32 +375,21 @@ class ChatController {
     const { messageIds } = req.body;
     const userId = req.user._id;
 
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      throw new ApiError(400, "Invalid chat ID");
-    }
-
-    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
-      throw new ApiError(400, "Message IDs are required");
-    }
-
-    if (!messageIds.every((id) => mongoose.Types.ObjectId.isValid(id))) {
-      throw new ApiError(400, "Invalid message ID in list");
-    }
-
     const chat = await Chat.findOne({ _id: chatId, participants: userId });
     if (!chat) throw new ApiError(404, "Chat not found or access denied");
 
     const deletedMessages = await Message.deleteMany({
       _id: { $in: messageIds },
       chatId,
-      sender: userId,
+      $or: [{ sender: userId }, { recipient: userId }],
     });
 
-    if (deletedMessages.deletedCount === 0) {
+    if (deletedMessages.deletedCount === 0)
       throw new ApiError(404, "No messages found to delete");
-    }
 
-    this.io.to(chatId).emit("messagesDeleted", { chatId, messageIds });
+    chat.participants.forEach((id) => {
+      this.io.to(id.toString()).emit("messagesDeleted", { chatId, messageIds });
+    });
 
     return res
       .status(200)
@@ -432,14 +402,9 @@ const initializeChatSocket = (io, onlineUsers) => {
 
   io.on("connection", (socket) => {
     socket.on("join", async (userId) => {
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        console.error("Invalid userId on socket join:", userId);
-        return;
-      }
+      if (!mongoose.Types.ObjectId.isValid(userId)) return;
       onlineUsers.set(socket.id, userId);
       socket.join(userId);
-      console.log(`User ${userId} joined with socket ${socket.id}`);
-
       const chats = await Chat.find({ participants: userId });
       chats.forEach((chat) => {
         chat.participants.forEach((participantId) => {
@@ -451,15 +416,11 @@ const initializeChatSocket = (io, onlineUsers) => {
     });
 
     socket.on("joinChat", (chatId) => {
-      if (mongoose.Types.ObjectId.isValid(chatId)) {
-        socket.join(chatId);
-      }
+      if (mongoose.Types.ObjectId.isValid(chatId)) socket.join(chatId);
     });
 
     socket.on("leaveChat", (chatId) => {
-      if (mongoose.Types.ObjectId.isValid(chatId)) {
-        socket.leave(chatId);
-      }
+      if (mongoose.Types.ObjectId.isValid(chatId)) socket.leave(chatId);
     });
 
     socket.on("markAsRead", async ({ chatId, messageId }) => {
@@ -467,9 +428,8 @@ const initializeChatSocket = (io, onlineUsers) => {
       if (
         !mongoose.Types.ObjectId.isValid(userId) ||
         !mongoose.Types.ObjectId.isValid(messageId)
-      ) {
+      )
         return;
-      }
       const message = await Message.findOne({
         _id: messageId,
         recipient: userId,
@@ -488,8 +448,6 @@ const initializeChatSocket = (io, onlineUsers) => {
       const userId = onlineUsers.get(socket.id);
       if (userId) {
         onlineUsers.delete(socket.id);
-        console.log(`User ${userId} disconnected`);
-
         const chats = await Chat.find({ participants: userId });
         chats.forEach((chat) => {
           chat.participants.forEach((participantId) => {
