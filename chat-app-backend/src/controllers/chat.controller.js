@@ -6,6 +6,7 @@ import ApiResponse from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
 import { encrypt, decrypt } from "../utils/encryption.js";
+import { uploadInCloudinary } from "../utils/cloudinary.js";
 
 class ChatController {
   constructor(io, onlineUsers) {
@@ -32,13 +33,20 @@ class ChatController {
     if (existingChat) {
       const populatedChat = await Chat.findById(existingChat._id)
         .populate("participants", "_id username profilePic isOnline status")
-        .populate("lastMessage", "message")
+        .populate("lastMessage", "message messageType")
         .lean();
       populatedChat._id = populatedChat._id.toString();
       populatedChat.participants = populatedChat.participants.map((p) => ({
         ...p,
         _id: p._id.toString(),
       }));
+      if (populatedChat.lastMessage) {
+        populatedChat.lastMessage.message =
+          populatedChat.lastMessage.messageType === "text"
+            ? decrypt(populatedChat.lastMessage.message)
+            : populatedChat.lastMessage.message;
+        populatedChat.lastMessage = populatedChat.lastMessage.message;
+      }
       return res
         .status(200)
         .json(new ApiResponse(200, populatedChat, "Chat already exists"));
@@ -53,13 +61,20 @@ class ChatController {
 
     const populatedChat = await Chat.findById(chat._id)
       .populate("participants", "_id username profilePic isOnline status")
-      .populate("lastMessage", "message")
+      .populate("lastMessage", "message messageType")
       .lean();
     populatedChat._id = populatedChat._id.toString();
     populatedChat.participants = populatedChat.participants.map((p) => ({
       ...p,
       _id: p._id.toString(),
     }));
+    if (populatedChat.lastMessage) {
+      populatedChat.lastMessage.message =
+        populatedChat.lastMessage.messageType === "text"
+          ? decrypt(populatedChat.lastMessage.message)
+          : populatedChat.lastMessage.message;
+      populatedChat.lastMessage = populatedChat.lastMessage.message;
+    }
 
     this.io.to(currentUserId.toString()).emit("newChat", populatedChat);
     this.io.to(targetUser._id.toString()).emit("newChat", populatedChat);
@@ -105,12 +120,20 @@ class ChatController {
 
     const populatedChat = await Chat.findById(groupChat._id)
       .populate("participants", "_id username profilePic isOnline status")
+      .populate("lastMessage", "message messageType")
       .lean();
     populatedChat._id = populatedChat._id.toString();
     populatedChat.participants = populatedChat.participants.map((p) => ({
       ...p,
       _id: p._id.toString(),
     }));
+    if (populatedChat.lastMessage) {
+      populatedChat.lastMessage.message =
+        populatedChat.lastMessage.messageType === "text"
+          ? decrypt(populatedChat.lastMessage.message)
+          : populatedChat.lastMessage.message;
+      populatedChat.lastMessage = populatedChat.lastMessage.message;
+    }
 
     participantIds.forEach((id) => {
       this.io.to(id.toString()).emit("newChat", populatedChat);
@@ -160,12 +183,20 @@ class ChatController {
 
     const populatedChat = await Chat.findById(chatId)
       .populate("participants", "_id username profilePic isOnline status")
+      .populate("lastMessage", "message messageType")
       .lean();
     populatedChat._id = populatedChat._id.toString();
     populatedChat.participants = populatedChat.participants.map((p) => ({
       ...p,
       _id: p._id.toString(),
     }));
+    if (populatedChat.lastMessage) {
+      populatedChat.lastMessage.message =
+        populatedChat.lastMessage.messageType === "text"
+          ? decrypt(populatedChat.lastMessage.message)
+          : populatedChat.lastMessage.message;
+      populatedChat.lastMessage = populatedChat.lastMessage.message;
+    }
 
     chat.participants.forEach((id) => {
       this.io.to(id.toString()).emit("groupUpdated", populatedChat);
@@ -197,6 +228,7 @@ class ChatController {
       sender: sender._id,
       chatId: chat._id,
       message: encryptedContent,
+      messageType: "text", // Explicitly set as text
       delivered: chat.participants.some(
         (p) => p.isOnline && p._id.toString() !== sender._id.toString()
       ),
@@ -226,7 +258,11 @@ class ChatController {
     if (populatedMessage.recipient)
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
-    populatedMessage.message = decrypt(populatedMessage.message);
+    // Decrypt here for real-time emission
+    populatedMessage.message =
+      populatedMessage.messageType === "text"
+        ? decrypt(populatedMessage.message)
+        : populatedMessage.message;
 
     chat.participants.forEach((participant) => {
       this.io.to(participant._id.toString()).emit("newMessage", {
@@ -247,7 +283,7 @@ class ChatController {
 
     const chats = await Chat.find({ participants: currentUserId })
       .populate("participants", "_id username profilePic isOnline status")
-      .populate("lastMessage", "message")
+      .populate("lastMessage", "message messageType")
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -259,7 +295,11 @@ class ChatController {
       }));
       if (chat.lastMessage) {
         chat.lastMessage._id = chat.lastMessage._id.toString();
-        chat.lastMessage.message = decrypt(chat.lastMessage.message);
+        // Only decrypt if it's a text message
+        chat.lastMessage.message =
+          chat.lastMessage.messageType === "text"
+            ? decrypt(chat.lastMessage.message)
+            : chat.lastMessage.message;
         chat.lastMessage = chat.lastMessage.message;
       }
       return chat;
@@ -276,6 +316,7 @@ class ChatController {
 
     const chat = await Chat.findOne({ _id: chatId, participants: userId })
       .populate("participants", "_id username profilePic isOnline status")
+      .populate("lastMessage", "message messageType")
       .lean();
     if (!chat) throw new ApiError(404, "Chat not found or access denied");
 
@@ -284,6 +325,13 @@ class ChatController {
       ...p,
       _id: p._id.toString(),
     }));
+    if (chat.lastMessage) {
+      chat.lastMessage.message =
+        chat.lastMessage.messageType === "text"
+          ? decrypt(chat.lastMessage.message)
+          : chat.lastMessage.message;
+      chat.lastMessage = chat.lastMessage.message;
+    }
 
     return res
       .status(200)
@@ -311,7 +359,10 @@ class ChatController {
       recipient: message.recipient
         ? { ...message.recipient, _id: message.recipient._id.toString() }
         : null,
-      message: decrypt(message.message),
+      message:
+        message.messageType === "text"
+          ? decrypt(message.message)
+          : message.message,
     }));
 
     return res
@@ -394,6 +445,93 @@ class ChatController {
     return res
       .status(200)
       .json(new ApiResponse(200, null, "Messages deleted successfully"));
+  });
+
+  uploadMedia = asyncHandler(async (req, res) => {
+    const { chatId } = req.params;
+    const sender = req.user;
+    const file = req.file;
+
+    if (!chatId || !mongoose.Types.ObjectId.isValid(chatId)) {
+      throw new ApiError(400, "Invalid chat ID");
+    }
+
+    if (!file) {
+      throw new ApiError(400, "Media file is required");
+    }
+
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+
+    if (file.mimetype.startsWith("image") && file.size > MAX_IMAGE_SIZE) {
+      throw new ApiError(400, "Image size exceeds 10MB limit");
+    }
+    if (file.mimetype.startsWith("video") && file.size > MAX_VIDEO_SIZE) {
+      throw new ApiError(400, "Video size exceeds 100MB limit");
+    }
+
+    const chat = await Chat.findOne({
+      _id: chatId,
+      participants: sender._id,
+    }).populate("participants", "isOnline");
+
+    if (!chat) {
+      throw new ApiError(404, "Chat not found or access denied");
+    }
+
+    const uploadResult = await uploadInCloudinary(file.path);
+    if (!uploadResult) {
+      throw new ApiError(500, "Failed to upload media to Cloudinary");
+    }
+
+    const recipientId = chat.participants.find(
+      (p) => p._id.toString() !== sender._id.toString()
+    )?._id;
+
+    const isRecipientOnline =
+      this.onlineUsers.has(recipientId.toString()) ||
+      chat.participants.find((p) => p._id.toString() === recipientId.toString())
+        ?.isOnline;
+
+    const newMessage = new Message({
+      recipient: recipientId,
+      sender: sender._id,
+      chatId: chat._id,
+      message: uploadResult.secure_url,
+      messageType: uploadResult.resource_type, // 'image' or 'video'
+      delivered: isRecipientOnline || false,
+      isRead: false,
+      timestamp: new Date(),
+    });
+
+    await newMessage.save();
+
+    chat.lastMessage = newMessage._id;
+    chat.updatedAt = new Date();
+    await chat.save();
+
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate("sender", "_id username profilePic")
+      .populate("recipient", "_id username profilePic")
+      .lean();
+
+    populatedMessage._id = populatedMessage._id.toString();
+    populatedMessage.chatId = populatedMessage.chatId.toString();
+    populatedMessage.sender._id = populatedMessage.sender._id.toString();
+    populatedMessage.recipient._id = populatedMessage.recipient._id.toString();
+
+    chat.participants.forEach((participant) => {
+      this.io.to(participant._id.toString()).emit("newMessage", {
+        chatId: chatId.toString(),
+        message: populatedMessage,
+      });
+    });
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(201, populatedMessage, "Media uploaded successfully")
+      );
   });
 }
 

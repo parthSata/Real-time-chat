@@ -17,7 +17,12 @@ const MessageSchema = new mongoose.Schema(
       ref: "Chat",
       required: true,
     },
-    message: { type: String, ref: "Message", required: true }, // Last unread message
+    message: { type: String, ref: "Message", required: true }, // Last unread message4
+    messageType: {
+      type: String,
+      enum: ["text", "image", "video"],
+      default: "text",
+    },
     delivered: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
     timestamp: { type: Date, default: Date.now },

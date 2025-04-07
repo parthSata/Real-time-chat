@@ -62,7 +62,6 @@
     max-width: 80%;
     margin-bottom: 0.5rem;
     max-width: fit-content;
-
   }
 
   .chat-bubble.sent {
@@ -137,5 +136,18 @@
   .sidebar-link.active {
     background-color: rgba(14, 165, 233, 0.2);
     color: #0ea5e9;
+  }
+
+  .loader {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 }

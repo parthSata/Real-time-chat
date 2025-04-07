@@ -2,6 +2,7 @@ import express from "express";
 import { body, param, validationResult } from "express-validator";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { ApiError } from "../utils/ApiError.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = express.Router();
 
@@ -137,6 +138,19 @@ const initializeChatRoutes = (chatController) => {
       validate,
     ],
     (req, res, next) => chatController.markMessageAsRead(req, res, next)
+  );
+
+  router.post(
+    "/:chatId/upload-media",
+    verifyJWT,
+    upload.single("media"), // Using multer middleware
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    (req, res, next) => chatController.uploadMedia(req, res, next)
   );
 
   return router;

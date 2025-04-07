@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Send, Paperclip, Mic, Phone, Video, MoreVertical, Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile } from 'lucide-react';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
@@ -23,6 +23,7 @@ interface Message {
   timestamp: Date;
   delivered: boolean;
   isRead: boolean;
+  messageType?: 'text' | 'image' | 'video'; // Added messageType
 }
 
 interface Chat {
@@ -48,10 +49,13 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [showOptionsMenu, setShowOptionsMenu] = useState<boolean>(false);
   const [showParticipantsDialog, setShowParticipantsDialog] = useState<boolean>(false);
+  const [selectedMedia, setSelectedMedia] = useState<{ file: File; preview: string; type: 'image' | 'video' } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, socket } = useAuth();
 
   useEffect(() => {
@@ -70,6 +74,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         setMessages(messagesData.message.map((msg: Message) => ({
           ...msg,
           timestamp: new Date(msg.timestamp),
+          messageType: msg.messageType || 'text', // Default to 'text' if not specified
         })));
       } catch (err: any) {
         setError(err.message || 'Failed to load chat');
@@ -91,7 +96,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         setMessages((prev) =>
           prev.some((m) => m._id === message._id)
             ? prev
-            : [...prev, { ...message, timestamp: new Date(message.timestamp) }]
+            : [...prev, { ...message, timestamp: new Date(message.timestamp), messageType: message.messageType || 'text' }]
         );
       }
     });
@@ -154,6 +159,37 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     }
   };
 
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedMedia({
+      file,
+      preview: URL.createObjectURL(file),
+      type: file.type.startsWith('image') ? 'image' : 'video',
+    });
+
+    const formData = new FormData();
+    formData.append('media', file);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/upload-media`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Failed to upload media');
+      setSelectedMedia(null);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   const handleRemoveUser = async (userId: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/chats/remove-user`, {
@@ -186,7 +222,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         credentials: 'include',
         body: JSON.stringify({ messageIds }),
       });
-      if (!response.ok) throw new Error('Only USe');
+      if (!response.ok) throw new Error('Failed to delete messages');
       setSelectedMessages(new Set());
       setIsSelectionMode(false);
     } catch (err: any) {
@@ -194,10 +230,63 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     }
   };
 
+  const renderMediaPreview = () => {
+    if (!selectedMedia) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="absolute bottom-20 left-4 right-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg z-50"
+      >
+        {selectedMedia.type === 'image' ? (
+          <img src={selectedMedia.preview} alt="Preview" className="max-h-64 rounded" />
+        ) : (
+          <video src={selectedMedia.preview} controls className="max-h-64 rounded" />
+        )}
+        <Button
+          onClick={() => setSelectedMedia(null)}
+          variant="outline"
+          size="sm"
+          className="mt-2"
+        >
+          Cancel
+        </Button>
+      </motion.div>
+    );
+  };
+
+  const renderMessageContent = (msg: Message) => {
+    if (msg.messageType === 'image') {
+      return (
+        <img
+          src={msg.message}
+          alt="Chat image"
+          className="max-w-xs rounded-lg cursor-pointer"
+          onClick={() => window.open(msg.message, '_blank')}
+        />
+      );
+    } else if (msg.messageType === 'video') {
+      return (
+        <video
+          src={msg.message}
+          controls
+          className="max-w-xs rounded-lg"
+        />
+      );
+    }
+    return msg.message;
+  };
+
   if (error) return <div className="h-screen flex items-center justify-center text-red-600">{error}</div>;
   if (!chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
   const displayName = chat.isGroupChat ? chat.chatName : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
+
+  const profilePic = chat.isGroupChat
+    ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
+    : chat.participants.find((p) => p._id !== user._id)?.profilePic ||
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
@@ -212,7 +301,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               onClick={() => chat.isGroupChat && setShowParticipantsDialog(true)}
             >
               <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`}
+                src={profilePic}
                 alt={displayName}
                 className="w-10 h-10 rounded-full"
               />
@@ -258,12 +347,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               </>
             ) : (
               <>
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
+                {/* <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
                   <Phone size={20} />
                 </motion.button>
                 <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
                   <Video size={20} />
-                </motion.button>
+                </motion.button> */}
                 <div className="relative">
                   <motion.button
                     ref={moreButtonRef}
@@ -319,14 +408,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                   />
                 )}
                 <div className={`flex ${msg.sender._id === user._id ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-xs">
+                  <div className="w-full">
                     {chat.isGroupChat && msg.sender._id !== user._id && (
                       <p className="text-xs text-gray-500 mb-1">{msg.sender.username}</p>
                     )}
                     <ChatMessage
                       message={{
                         id: msg._id,
-                        text: msg.message,
+                        text: renderMessageContent(msg),
                         sender: msg.sender._id,
                         timestamp: msg.timestamp,
                         isMe: msg.sender._id === user._id,
@@ -341,53 +430,36 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
           </AnimatePresence>
           <div ref={messagesEndRef} />
         </div>
-        <AnimatePresence>
-          {showParticipantsDialog && chat.isGroupChat && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-            >
-              <motion.div
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.95 }}
-                className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Group Members</h3>
-                  <button onClick={() => setShowParticipantsDialog(false)} className="p-2 text-gray-500 hover:text-gray-600">
-                    <ArrowLeft size={20} />
-                  </button>
-                </div>
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {chat.participants.map((p) => (
-                    <div key={p._id} className="flex justify-between items-center">
-                      <span className="text-gray-900 dark:text-white">{p.username}</span>
-                      {chat.createdBy === user._id && p._id !== user._id && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRemoveUser(p._id)}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {renderMediaPreview()}
       </main>
 
-      <footer className="bg-white dark:bg-gray-800 border-t p-4">
+      <footer className="bg-white dark:bg-gray-800 border-t p-4 relative">
         <form ref={formRef} onSubmit={handleSendMessage} className="max-w-3xl mx-auto">
           <div className="flex items-center space-x-2">
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} type="button" className="p-2 text-gray-500">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-500"
+            >
               <Paperclip size={20} />
+            </motion.button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleMediaUpload}
+              accept="image/*,video/*"
+              className="hidden"
+            />
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="p-2 text-gray-500"
+            >
+              <Smile size={20} />
             </motion.button>
             <input
               type="text"
@@ -407,7 +479,70 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             )}
           </div>
         </form>
+        <AnimatePresence>
+          {showEmojiPicker && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="absolute bottom-16 left-4 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg z-50"
+            >
+              <div className="grid grid-cols-5 gap-2">
+                {['😊', '😂', '👍', '❤️', '😢'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleEmojiSelect(emoji)}
+                    className="text-2xl hover:bg-gray-100 dark:hover:bg-gray-700 rounded p-1"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </footer>
+
+      <AnimatePresence>
+        {showParticipantsDialog && chat.isGroupChat && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Group Members</h3>
+                <button onClick={() => setShowParticipantsDialog(false)} className="p-2 text-gray-500 hover:text-gray-600">
+                  <ArrowLeft size={20} />
+                </button>
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {chat.participants.map((p) => (
+                  <div key={p._id} className="flex justify-between items-center">
+                    <span className="text-gray-900 dark:text-white">{p.username}</span>
+                    {chat.createdBy === user._id && p._id !== user._id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRemoveUser(p._id)}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

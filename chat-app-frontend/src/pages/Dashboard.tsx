@@ -67,9 +67,7 @@ const Dashboard: React.FC = () => {
         const data = await response.json();
         if (data.success) {
           setChats(data.message.map((chat: Chat) => ({ ...chat, unread: 0 })));
-        } else {
-          setError(data.message || 'Failed to fetch chats');
-        }
+        } else setError(data.message || 'Failed to fetch chats');
       } catch (err: any) {
         setError('Failed to fetch chats: ' + err.message);
       }
