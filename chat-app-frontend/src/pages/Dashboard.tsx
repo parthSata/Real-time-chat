@@ -12,7 +12,7 @@ import ProfileDialog from '../components/ProfileDialog';
 import CreateGroupDialog from '../components/CreateGroupDialog';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = 'http://localhost:3000';
 
 interface User {
   _id: string;
@@ -60,7 +60,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/chats/my-chats`, {
+        const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/my-chats`, {
           method: 'GET',
           credentials: 'include',
         });
@@ -126,7 +126,7 @@ const Dashboard: React.FC = () => {
 
   const searchUser = async (username: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/users/search?username=${username}`, { credentials: 'include' });
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/users/search?username=${username}`, { credentials: 'include' });
       const data = await response.json();
       if (data.success) setSearchedUser(data.data);
       else setError('User not found');
@@ -137,7 +137,7 @@ const Dashboard: React.FC = () => {
 
   const handleCreateChat = async (username?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/create`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -157,7 +157,7 @@ const Dashboard: React.FC = () => {
   const handleCreateGroup = async (groupName: string, participantUsernames: string[]) => {
     try {
       console.log('Creating group with:', { groupName, participantUsernames });
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/create-group`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/create-group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -194,7 +194,7 @@ const Dashboard: React.FC = () => {
 
   const handleDeleteChat = async (chatId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

@@ -5,7 +5,7 @@ import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 
-const API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = 'http://localhost:3000';
 
 interface Participant {
   _id: string;
@@ -63,8 +63,8 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       try {
         setLoading(true);
         const [chatResponse, messagesResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' }),
-          fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' }),
+          fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' }),
+          fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' }),
         ]);
         const chatData = await chatResponse.json();
         const messagesData = await messagesResponse.json();
@@ -145,7 +145,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     if (!message.trim() || !chatId || !user || !chat) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/message`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -173,7 +173,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     formData.append('media', file);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/upload-media`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/upload-media`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
@@ -192,7 +192,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
 
   const handleRemoveUser = async (userId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/remove-user`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/remove-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -216,7 +216,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const handleDeleteSelectedMessages = async () => {
     try {
       const messageIds = Array.from(selectedMessages);
-      const response = await fetch(`${API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
+      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/messages`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

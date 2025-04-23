@@ -5,13 +5,13 @@ const ivLength = 16;
 
 // Determine the key format and convert to a 32-byte buffer
 let key;
-if (process.env.ENCRYPTION_KEY.match(/^[0-9a-fA-F]{64}$/)) {
-  key = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
-} else if (process.env.ENCRYPTION_KEY.match(/^[A-Za-z0-9+/=]{44}$/)) {
-  key = Buffer.from(process.env.ENCRYPTION_KEY, "base64");
+if (process.env.VITE_ENCRYPTION_KEY.match(/^[0-9a-fA-F]{64}$/)) {
+  key = Buffer.from(process.env.VITE_ENCRYPTION_KEY, "hex");
+} else if (process.env.VITE_ENCRYPTION_KEY.match(/^[A-Za-z0-9+/=]{44}$/)) {
+  key = Buffer.from(process.env.VITE_ENCRYPTION_KEY, "base64");
 } else {
   throw new Error(
-    "Invalid ENCRYPTION_KEY format. Must be a 64-character hex string or a 44-character Base64 string."
+    "Invalid VITE_ENCRYPTION_KEY format. Must be a 64-character hex string or a 44-character Base64 string."
   );
 }
 

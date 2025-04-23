@@ -4,7 +4,7 @@ import { X, Users, Search, Plus, UserMinus } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 
-const API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = 'http://localhost:3000';
 
 interface User {
     _id: string;
@@ -33,7 +33,7 @@ const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({ isOpen, onClose, 
         const fetchUsers = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`${API_BASE_URL}/api/v1/users/all`, {
+                const response = await fetch(`${VITE_API_BASE_URL}/api/v1/users/all`, {
                     credentials: 'include',
                 });
 

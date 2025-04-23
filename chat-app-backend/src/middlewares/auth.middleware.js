@@ -15,7 +15,7 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
 
   let decodedInfo;
   try {
-    decodedInfo = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    decodedInfo = jwt.verify(token, process.env.VITE_ACCESS_TOKEN_SECRET);
     if (!decodedInfo?._id) {
       throw new ApiError(401, "Invalid access token: No user ID in token");
     }

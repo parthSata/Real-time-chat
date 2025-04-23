@@ -68,14 +68,14 @@ const registerUser = asyncHandler(async (req, res) => {
 
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VITE_NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 24 * 60 * 60 * 1000,
   });
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VITE_NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
@@ -134,7 +134,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VITE_NODE_ENV === "production",
     sameSite: "strict",
   };
 
@@ -184,13 +184,13 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   res.clearCookie("accessToken", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VITE_NODE_ENV === "production",
     sameSite: "strict",
   });
 
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.VITE_NODE_ENV === "production",
     sameSite: "strict",
   });
 
@@ -309,7 +309,7 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    const decoded = jwt.verify(refreshToken, process.env.VITE_REFRESH_TOKEN_SECRET);
     const user = await User.findById(decoded._id).select("+refreshToken");
     if (!user || user.refreshToken !== refreshToken) {
       throw new ApiError(401, "Invalid refresh token");
@@ -324,7 +324,7 @@ const refreshToken = asyncHandler(async (req, res) => {
 
     const options = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.VITE_NODE_ENV === "production",
       sameSite: "strict",
     };
 
