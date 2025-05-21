@@ -7,7 +7,7 @@ import './index.css';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import ChatRoom from './pages/ChatRoom';
+import ChatRoomWrapper from './pages/ChatRoomWrapper'; // Import the wrapper
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -56,11 +56,11 @@ function App() {
             <Route
               path="/chat/:id"
               element={
-                // <ErrorBoundary>
+                <ErrorBoundary>
                   <ProtectedRoute>
-                    <ChatRoom />
+                    <ChatRoomWrapper />
                   </ProtectedRoute>
-                // </ErrorBoundary>
+                </ErrorBoundary>
               }
             />
             <Route

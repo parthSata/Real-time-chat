@@ -1,3 +1,4 @@
+// src/pages/ChatRoom.tsx
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile } from 'lucide-react';
@@ -23,7 +24,7 @@ interface Message {
   timestamp: Date;
   delivered: boolean;
   isRead: boolean;
-  messageType?: 'text' | 'image' | 'video'; // Added messageType
+  messageType?: 'text' | 'image' | 'video';
 }
 
 interface Chat {
@@ -59,6 +60,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const { user, socket } = useAuth();
 
   useEffect(() => {
+    if (!chatId) {
+      setError('Invalid chat ID');
+      onClose();
+      return;
+    }
+
     const loadChat = async () => {
       try {
         setLoading(true);
@@ -74,7 +81,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         setMessages(messagesData.message.map((msg: Message) => ({
           ...msg,
           timestamp: new Date(msg.timestamp),
-          messageType: msg.messageType || 'text', // Default to 'text' if not specified
+          messageType: msg.messageType || 'text',
         })));
       } catch (err: any) {
         setError(err.message || 'Failed to load chat');
@@ -347,12 +354,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               </>
             ) : (
               <>
-                {/* <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
-                  <Phone size={20} />
-                </motion.button>
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2 text-gray-500 hover:text-gray-600">
-                  <Video size={20} />
-                </motion.button> */}
                 <div className="relative">
                   <motion.button
                     ref={moreButtonRef}
