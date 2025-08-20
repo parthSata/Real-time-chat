@@ -23,7 +23,6 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
     throw new ApiError(401, `Invalid access token: ${error.message}`);
   }
 
-  console.log("Decoded token user ID:", decodedInfo._id); // Debug log
 
   const user = await User.findById(decodedInfo._id).select(
     "-password -refreshToken"
@@ -34,6 +33,5 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
   }
 
   req.user = user; // Ensure req.user contains the full user object
-  console.log("Verified user ID:", req.user._id.toString()); // Debug log
   next();
 });

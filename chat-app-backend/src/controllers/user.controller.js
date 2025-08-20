@@ -9,7 +9,6 @@ import bcrypt from "bcrypt";
 const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password, status, isOnline, lastSeen } = req.body;
 
-  console.log(`Registering user with email: ${email}`);
 
   if (!username?.trim() || !email?.trim() || !password?.trim()) {
     throw new ApiError(400, "Username, email, and password are required");
@@ -55,9 +54,7 @@ const registerUser = asyncHandler(async (req, res) => {
   if (lastSeen) userData.lastSeen = new Date(lastSeen);
 
   const newUser = new User(userData);
-  console.log("Saving new user to MongoDB Atlas...");
   await newUser.save();
-  console.log("User saved successfully:", newUser._id.toString());
 
   const accessToken = newUser.generateAccessToken();
   const refreshToken = newUser.generateRefreshToken();
@@ -103,22 +100,18 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  console.log(`Login attempt for email: ${email}`);
 
   if (!email || !password) {
-    console.log("Email or password missing");
     throw new ApiError(400, "Email and password are required");
   }
 
   const user = await User.findOne({ email }).select("+password");
   if (!user) {
-    console.log(`User not found for email: ${email}`);
     throw new ApiError(401, "Invalid email or password");
   }
 
   const isMatch = await user.isPasswordCorrect(password);
   if (!isMatch) {
-    console.log(`Password does not match for email: ${email}`);
     throw new ApiError(401, "Invalid email or password");
   }
 
@@ -147,9 +140,7 @@ const loginUser = asyncHandler(async (req, res) => {
     isOnline: user.isOnline,
   };
 
-  console.log(
-    `Login successful for email: ${email}, User ID: ${loggedInUser._id}`
-  );
+
   return res
     .status(200)
     .cookie("accessToken", accessToken, {

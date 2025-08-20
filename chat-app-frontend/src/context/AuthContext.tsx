@@ -52,7 +52,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkSession = async () => {
     if (hasCheckedSession.current) {
-      console.log('Session already checked, skipping...');
       return;
     }
 
@@ -91,7 +90,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             {},
             { withCredentials: true }
           );
-          console.log('Token refresh response:', refreshResponse.data);
 
           const retryResponse = await axios.get('http://localhost:3000/api/v1/users/me', {
             withCredentials: true,
@@ -110,7 +108,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               status: retryResponse.data.message.user.status,
               isOnline: retryResponse.data.message.user.isOnline,
             };
-            console.log('Retry session - User _id:', newUser._id);
             setUser(newUser);
             setIsAuthenticated(true);
           } else {
@@ -152,8 +149,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
 
     newSocket.on('connect', () => {
-      console.log('Socket connected:', newSocket.id);
-      console.log('Joining socket with User _id:', user._id);
+
       newSocket.emit('join', user._id);
     });
 
@@ -197,7 +193,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           status: response.data.message.user.status,
           isOnline: response.data.message.user.isOnline,
         };
-        console.log('Login - User _id:', newUser._id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
@@ -238,7 +233,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           status: response.data.message.user.status,
           isOnline: response.data.message.user.isOnline,
         };
-        console.log('Register - User _id:', newUser._id);
         setUser(newUser);
         setIsAuthenticated(true);
         hasCheckedSession.current = true;
@@ -298,7 +292,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           status: response.data.data.status,
           isOnline: response.data.data.isOnline,
         };
-        console.log('Update Profile - User _id:', updatedUser._id);
         setUser(updatedUser);
       } else {
         throw new Error('Profile update failed: Invalid response structure');

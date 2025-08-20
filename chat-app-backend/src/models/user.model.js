@@ -20,15 +20,12 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  console.log(`Hashing password for user: ${this.email}`);
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
 userSchema.methods.isPasswordCorrect = async function (password) {
-  console.log(`Comparing password for user: ${this.email}`);
   const isMatch = await bcrypt.compare(password, this.password);
-  console.log(`Password match: ${isMatch}`);
   return isMatch;
 };
 

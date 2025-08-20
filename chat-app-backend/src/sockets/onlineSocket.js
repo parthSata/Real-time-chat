@@ -11,7 +11,6 @@ export function setupOnlineSocket(io, onlineUsers) {
       // Broadcast the updated list of online users to all connected clients
       io.emit("users-online", Array.from(onlineUsers.values()));
       // Log the user's online status in the server console
-      console.log(`${username} is online`);
     });
 
     // Handle the "disconnect" event when a user leaves

@@ -42,7 +42,6 @@ const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({ isOpen, onClose, 
                 }
 
                 const data = await response.json();
-                console.log('Fetched users data:', data.message); // Debug log to inspect API response
 
                 // Check if data.data is an array
                 if (data.success && Array.isArray(data.message)) {
@@ -89,7 +88,6 @@ const CreateGroupDialog: React.FC<CreateGroupDialogProps> = ({ isOpen, onClose, 
             return;
         }
 
-        console.log('Submitting group:', { groupName, members: Array.from(selectedMembers) });
         onCreateGroup(groupName, Array.from(selectedMembers));
         setGroupName('');
         setSelectedMembers(new Set());

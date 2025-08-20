@@ -156,7 +156,6 @@ const Dashboard: React.FC = () => {
 
   const handleCreateGroup = async (groupName: string, participantUsernames: string[]) => {
     try {
-      console.log('Creating group with:', { groupName, participantUsernames });
       const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/create-group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,7 +164,6 @@ const Dashboard: React.FC = () => {
       });
 
       const data = await response.json();
-      console.log('Group creation response:', data);
       if (data.success) {
         setChats((prev) => [data.message, ...prev]);
         setIsGroupDialogOpen(false);
