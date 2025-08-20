@@ -153,6 +153,18 @@ const initializeChatRoutes = (chatController) => {
     (req, res, next) => chatController.uploadMedia(req, res, next)
   );
 
+  router.post(
+    "/:chatId/initiate-video-call",
+    verifyJWT,
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    (req, res, next) => chatController.initiateVideoCall(req, res, next)
+  );
+
   return router;
 };
 

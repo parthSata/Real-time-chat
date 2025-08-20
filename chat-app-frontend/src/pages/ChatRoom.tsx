@@ -1,7 +1,6 @@
-// src/pages/ChatRoom.tsx
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile, Video, VolumeX, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
@@ -52,12 +51,32 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const [showParticipantsDialog, setShowParticipantsDialog] = useState<boolean>(false);
   const [selectedMedia, setSelectedMedia] = useState<{ file: File; preview: string; type: 'image' | 'video' } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+  const [isVideoCallActive, setIsVideoCallActive] = useState<boolean>(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isInitiator, setIsInitiator] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isVideoMaximized, setIsVideoMaximized] = useState<boolean>(false);
+  const [isVideoMinimized, setIsVideoMinimized] = useState<boolean>(false);
+  const [videoPopupPosition, setVideoPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const videoPopupRef = useRef<HTMLDivElement>(null);
   const { user, socket } = useAuth();
+
+  // WebRTC configuration with STUN servers
+  const rtcConfig: RTCConfiguration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  };
 
   useEffect(() => {
     if (!chatId) {
@@ -118,13 +137,69 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       }
     });
 
+    socket.on('videoCallInitiated', (callData: { chatId: string; initiatorId: string; recipientId: string }) => {
+      if (callData.chatId === chatId && callData.recipientId === user._id) {
+        if (window.confirm(`${chat.participants.find(p => p._id === callData.initiatorId)?.username} is calling you. Accept?`)) {
+          startVideoCall(false, callData.initiatorId);
+          socket.emit('acceptVideoCall', { chatId });
+        }
+      }
+    });
+
+    socket.on('videoCallAccepted', ({ chatId: acceptedChatId }: { chatId: string }) => {
+      if (acceptedChatId === chatId && isInitiator) {
+        initiateWebRTCCall();
+      }
+    });
+
+    socket.on('videoCallSignal', async ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
+      if (!peerConnectionRef.current) return;
+
+      try {
+        if ('type' in signal) {
+          // Handle offer or answer
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signal));
+          if (signal.type === 'offer' && !isInitiator) {
+            // Create and send answer
+            const answer = await peerConnectionRef.current.createAnswer();
+            await peerConnectionRef.current.setLocalDescription(answer);
+            const recipientId = chat.participants.find(p => p._id !== user._id)?._id;
+            if (recipientId) {
+              socket.emit('videoCallSignal', {
+                chatId,
+                signal: answer,
+                to: recipientId,
+                from: user._id,
+              });
+            }
+          }
+        } else {
+          // Handle ICE candidate
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(signal));
+        }
+      } catch (err: any) {
+        setError('Failed to process signal: ' + err.message);
+      }
+    });
+
+    socket.on('videoCallEnded', ({ chatId: endedChatId }: { chatId: string }) => {
+      if (endedChatId === chatId) {
+        endVideoCall();
+      }
+    });
+
     return () => {
       socket.off('newMessage');
       socket.off('groupUpdated');
       socket.off('messagesDeleted');
+      socket.off('videoCallInitiated');
+      socket.off('videoCallAccepted');
+      socket.off('videoCallSignal');
+      socket.off('videoCallEnded');
       socket.emit('leaveChat', chatId);
+      endVideoCall();
     };
-  }, [socket, chatId, user, chat]);
+  }, [socket, chatId, user, chat, isInitiator]);
 
   useLayoutEffect(() => {
     if (!loading && messages.length > 0) {
@@ -146,6 +221,158 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  // Draggable video popup
+  useEffect(() => {
+    const videoPopup = videoPopupRef.current;
+    if (!videoPopup || isVideoMaximized || isVideoMinimized) return;
+
+    let isDragging = false;
+    let currentX: number;
+    let currentY: number;
+    let initialX: number;
+    let initialY: number;
+
+    const onMouseDown = (e: MouseEvent) => {
+      isDragging = true;
+      initialX = e.clientX - currentX;
+      initialY = e.clientY - currentY;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        setVideoPopupPosition({ x: currentX, y: currentY });
+      }
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+    };
+
+    currentX = videoPopupPosition.x;
+    currentY = videoPopupPosition.y;
+
+    videoPopup.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      videoPopup.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [videoPopupPosition, isVideoMaximized, isVideoMinimized]);
+
+  const startVideoCall = async (initiator: boolean, recipientId?: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setLocalStream(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      setIsVideoCallActive(true);
+      setIsInitiator(initiator);
+
+      // Initialize RTCPeerConnection
+      const peerConnection = new RTCPeerConnection(rtcConfig);
+      peerConnectionRef.current = peerConnection;
+
+      // Add local stream tracks
+      stream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      // Handle remote stream
+      peerConnection.ontrack = (event) => {
+        const [remote] = event.streams;
+        setRemoteStream(remote);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remote;
+        }
+      };
+
+      // Handle ICE candidates
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate && recipientId) {
+          socket?.emit('videoCallSignal', {
+            chatId,
+            signal: event.candidate,
+            to: recipientId,
+            from: user?._id,
+          });
+        }
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'closed') {
+          endVideoCall();
+        }
+      };
+
+      if (initiator && recipientId) {
+        const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/initiate-video-call`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!response.ok) throw new Error('Failed to initiate video call');
+      }
+    } catch (err: any) {
+      setError('Failed to access camera/microphone: ' + err.message);
+      setIsVideoCallActive(false);
+    }
+  };
+
+  const initiateWebRTCCall = async () => {
+    if (!peerConnectionRef.current || !localStream || !chat || !user) return;
+
+    const recipientId = chat.participants.find(p => p._id !== user._id)?._id;
+    if (!recipientId) return;
+
+    try {
+      // Create offer
+      const offer = await peerConnectionRef.current.createOffer();
+      await peerConnectionRef.current.setLocalDescription(offer);
+      socket?.emit('videoCallSignal', {
+        chatId,
+        signal: offer,
+        to: recipientId,
+        from: user._id,
+      });
+    } catch (err: any) {
+      setError('WebRTC error: ' + err.message);
+      endVideoCall();
+    }
+  };
+
+  const toggleMute = () => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsMuted(!audioTrack.enabled);
+    }
+  };
+
+  const endVideoCall = () => {
+    if (localStream) {
+      localStream.getTracks().forEach((track) => track.stop());
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    setLocalStream(null);
+    setRemoteStream(null);
+    setIsVideoCallActive(false);
+    setIsInitiator(false);
+    setIsMuted(false);
+    setIsVideoMaximized(false);
+    setIsVideoMinimized(false);
+    setVideoPopupPosition({ x: 0, y: 0 });
+    socket?.emit('endVideoCall', { chatId });
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,14 +516,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   if (!chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
   const displayName = chat.isGroupChat ? chat.chatName : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
+  const recipientId = chat.participants.find((p) => p._id !== user._id)?._id;
 
   const profilePic = chat.isGroupChat
     ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
     : chat.participants.find((p) => p._id !== user._id)?.profilePic ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+      `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 relative">
       <header className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center">
@@ -330,6 +558,17 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            {!chat.isGroupChat && !isSelectionMode && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => startVideoCall(true, recipientId)}
+                className="p-2 text-gray-500 hover:text-gray-600"
+                disabled={isVideoCallActive}
+              >
+                <Video size={20} />
+              </motion.button>
+            )}
             {isSelectionMode ? (
               <>
                 <Button
@@ -503,6 +742,101 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
           )}
         </AnimatePresence>
       </footer>
+
+      {/* Video Call Pop-up */}
+      <AnimatePresence>
+        {isVideoCallActive && (
+          <motion.div
+            ref={videoPopupRef}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className={`fixed z-50 bg-gray-800 rounded-lg shadow-lg overflow-hidden
+              ${isVideoMaximized ? 'top-0 left-0 w-full h-full' : isVideoMinimized ? 'bottom-4 right-4 w-48 h-48' : 'w-[600px] h-[400px]'}
+              ${!isVideoMaximized && !isVideoMinimized ? 'cursor-move' : ''}`}
+            style={!isVideoMaximized && !isVideoMinimized ? { top: videoPopupPosition.y, left: videoPopupPosition.x } : {}}
+          >
+            <div className="flex flex-col h-full">
+              {/* Header for dragging and controls */}
+              <div className="flex justify-between items-center p-2 bg-gray-900">
+                <span className="text-white text-sm">Video Call with {displayName}</span>
+                <div className="flex space-x-2">
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={toggleMute}
+                    className="p-1 text-white hover:text-gray-300"
+                  >
+                    {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => {
+                      if (isVideoMaximized) {
+                        setIsVideoMaximized(false);
+                        setIsVideoMinimized(false);
+                      } else if (isVideoMinimized) {
+                        setIsVideoMinimized(false);
+                        setIsVideoMaximized(false);
+                      } else {
+                        setIsVideoMaximized(true);
+                        setIsVideoMinimized(false);
+                      }
+                    }}
+                    className="p-1 text-white hover:text-gray-300"
+                  >
+                    {isVideoMaximized ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsVideoMinimized(!isVideoMinimized)}
+                    className="p-1 text-white hover:text-gray-300"
+                  >
+                    <Minimize2 size={20} />
+                  </motion.button>
+                </div>
+              </div>
+              {/* Video streams */}
+              <div className="flex-1 flex flex-col sm:flex-row gap-2 p-2 bg-gray-700">
+                <div className="relative flex-1">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    muted
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                  <span className="absolute bottom-2 left-2 text-white bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+                    You
+                  </span>
+                </div>
+                <div className="relative flex-1">
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                  <span className="absolute bottom-2 left-2 text-white bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+                    {displayName}
+                  </span>
+                </div>
+              </div>
+              {/* Control buttons */}
+              <div className="p-2 bg-gray-900 flex justify-center">
+                <Button
+                  onClick={endVideoCall}
+                  variant="primary"
+                  size="sm"
+                  className="bg-red-500 hover:bg-red-600"
+                >
+                  End Call
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showParticipantsDialog && chat.isGroupChat && (

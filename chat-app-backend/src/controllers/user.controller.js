@@ -199,35 +199,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
-const getCurrentUser = asyncHandler(async (req, res) => {
-  const user = req.user;
-  if (!user) {
-    throw new ApiError(401, "User not authenticated");
-  }
-
-  const userData = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
-  if (!userData) {
-    throw new ApiError(404, "User not found");
-  }
-
-  const userResponse = {
-    _id: userData._id.toString(),
-    username: userData.username,
-    email: userData.email,
-    profilePic: userData.profilePic || "",
-    status: userData.status,
-    isOnline: userData.isOnline,
-  };
-
-  return res
-    .status(200)
-    .json(
-      new ApiResponse(200, { user: userResponse }, "User fetched successfully")
-    );
-});
-
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
@@ -302,6 +273,35 @@ const updateProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, userResponse, "Profile updated successfully"));
 });
 
+const getCurrentUser = asyncHandler(async (req, res) => {
+  const user = req.user;
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  const userData = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+  if (!userData) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const userResponse = {
+    _id: userData._id.toString(),
+    username: userData.username,
+    email: userData.email,
+    profilePic: userData.profilePic || "",
+    status: userData.status,
+    isOnline: userData.isOnline,
+  };
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, { user: userResponse }, "User fetched successfully")
+    );
+});
+
 const refreshToken = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken) {
@@ -309,7 +309,10 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.VITE_REFRESH_TOKEN_SECRET);
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.VITE_REFRESH_TOKEN_SECRET
+    );
     const user = await User.findById(decoded._id).select("+refreshToken");
     if (!user || user.refreshToken !== refreshToken) {
       throw new ApiError(401, "Invalid refresh token");

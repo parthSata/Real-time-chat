@@ -17,12 +17,15 @@
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.2.0",
     "react-toastify": "^11.0.5",
-    "socket.io-client": "^4.8.1"
+    "simple-peer": "^4.2.1",
+    "socket.io-client": "^4.8.1",
+    "webrtc": "^1.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/simple-peer": "^9.11.8",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.21.0",

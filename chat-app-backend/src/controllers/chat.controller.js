@@ -173,7 +173,7 @@ class ChatController {
         (id) => id.toString() === userIdToRemove.toString()
       )
     ) {
-      throw new ApiError(400, "User not in group");
+      throw new ApiError(400, "User not in Group");
     }
 
     chat.participants = chat.participants.filter(
@@ -224,11 +224,11 @@ class ChatController {
     const encryptedContent = encrypt(content);
 
     const newMessage = new Message({
-      recipient: recipientIds[0], // For group chats, this could be null or handled differently
+      recipient: recipientIds[0],
       sender: sender._id,
       chatId: chat._id,
       message: encryptedContent,
-      messageType: "text", // Explicitly set as text
+      messageType: "text",
       delivered: chat.participants.some(
         (p) => p.isOnline && p._id.toString() !== sender._id.toString()
       ),
@@ -258,7 +258,6 @@ class ChatController {
     if (populatedMessage.recipient)
       populatedMessage.recipient._id =
         populatedMessage.recipient._id.toString();
-    // Decrypt here for real-time emission
     populatedMessage.message =
       populatedMessage.messageType === "text"
         ? decrypt(populatedMessage.message)
@@ -295,7 +294,6 @@ class ChatController {
       }));
       if (chat.lastMessage) {
         chat.lastMessage._id = chat.lastMessage._id.toString();
-        // Only decrypt if it's a text message
         chat.lastMessage.message =
           chat.lastMessage.messageType === "text"
             ? decrypt(chat.lastMessage.message)
@@ -460,8 +458,8 @@ class ChatController {
       throw new ApiError(400, "Media file is required");
     }
 
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-    const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
     if (file.mimetype.startsWith("image") && file.size > MAX_IMAGE_SIZE) {
       throw new ApiError(400, "Image size exceeds 10MB limit");
@@ -498,7 +496,7 @@ class ChatController {
       sender: sender._id,
       chatId: chat._id,
       message: uploadResult.secure_url,
-      messageType: uploadResult.resource_type, // 'image' or 'video'
+      messageType: uploadResult.resource_type,
       delivered: isRecipientOnline || false,
       isRead: false,
       timestamp: new Date(),
@@ -532,6 +530,42 @@ class ChatController {
       .json(
         new ApiResponse(201, populatedMessage, "Media uploaded successfully")
       );
+  });
+
+  initiateVideoCall = asyncHandler(async (req, res) => {
+    const { chatId } = req.params;
+    const userId = req.user._id;
+
+    const chat = await Chat.findOne({ _id: chatId, participants: userId });
+    if (!chat) throw new ApiError(404, "Chat not found or access denied");
+
+    if (chat.isGroupChat) {
+      throw new ApiError(400, "Video calls are not supported in group chats");
+    }
+
+    const recipientId = chat.participants.find(
+      (p) => p._id.toString() !== userId.toString()
+    )?._id;
+
+    if (!recipientId) {
+      throw new ApiError(400, "No recipient found for video call");
+    }
+
+    const callData = {
+      chatId,
+      initiatorId: userId.toString(),
+      recipientId: recipientId.toString(),
+      status: "initiated",
+      createdAt: new Date(),
+    };
+
+    chat.participants.forEach((participant) => {
+      this.io.to(participant._id.toString()).emit("videoCallInitiated", callData);
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, callData, "Video call initiated"));
   });
 }
 
@@ -580,6 +614,18 @@ const initializeChatSocket = (io, onlineUsers) => {
           messageId: message._id.toString(),
         });
       }
+    });
+
+    socket.on("videoCallSignal", ({ chatId, signal, to, from }) => {
+      io.to(to).emit("videoCallSignal", { signal, from });
+    });
+
+    socket.on("acceptVideoCall", ({ chatId, userId }) => {
+      io.to(chatId).emit("videoCallAccepted", { chatId, userId });
+    });
+
+    socket.on("endVideoCall", ({ chatId }) => {
+      io.to(chatId).emit("videoCallEnded", { chatId });
     });
 
     socket.on("disconnect", async () => {
