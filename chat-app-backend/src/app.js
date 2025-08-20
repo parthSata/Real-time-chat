@@ -15,7 +15,8 @@ const server = http.createServer(app);
 
 // Get the CORS origin from the environment variables.
 // Use your specific Vercel URL in production, or localhost for development.
-const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:5173";
+const corsOrigin = process.env.VITE_CORS_ORIGIN || "http://localhost:5173";
+console.log("🚀 ~ corsOrigin:", corsOrigin);
 
 // Middleware
 app.use(

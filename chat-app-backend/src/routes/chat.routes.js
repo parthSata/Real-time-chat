@@ -4,6 +4,7 @@ import { body, param, validationResult } from "express-validator";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { ApiError } from "../utils/ApiError.js";
 import { upload } from "../middlewares/multer.middleware.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js"; // You will need to create this utility function
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ const initializeChatRoutes = ({ triggerPusherEvent }) => {
         const { chatId, content } = req.body;
         const sender = req.user;
 
-        // In a real app, you would save the message to your database here first.
+        // In a real app, you would save the message to your database first.
         // const message = await Message.create({ chatId, content, sender: sender._id });
 
         // Trigger the Pusher event to send the message to all listening clients
@@ -68,7 +69,68 @@ const initializeChatRoutes = ({ triggerPusherEvent }) => {
   // You would also update any other routes that need real-time updates
   // For example, when a user joins a group chat or a message is deleted.
 
-  // Other routes remain the same for now
+  // The route to upload media, now updated with Cloudinary logic
+  router.post(
+    "/:chatId/upload-media",
+    verifyJWT,
+    upload.single("media"), // Using multer's memoryStorage middleware
+    [
+      param("chatId")
+        .isMongoId()
+        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
+      validate,
+    ],
+    async (req, res, next) => {
+      try {
+        const { chatId } = req.params;
+        const sender = req.user;
+        const mediaFile = req.file;
+
+        if (!mediaFile) {
+          return next(new ApiError(400, "No media file provided"));
+        }
+
+        // Upload the file directly from memory to Cloudinary
+        const cloudinaryResponse = await uploadOnCloudinary(mediaFile);
+
+        if (!cloudinaryResponse || !cloudinaryResponse.url) {
+          return next(
+            new ApiError(500, "Failed to upload media to Cloudinary")
+          );
+        }
+
+        // In a real app, you would save this URL to your message in the database.
+        // const message = await Message.create({ chatId, content: cloudinaryResponse.url, sender: sender._id });
+
+        // Trigger a Pusher event with the URL
+        await triggerPusherEvent(`chat-${chatId}`, "new-media-message", {
+          chatId,
+          mediaUrl: cloudinaryResponse.url,
+          mediaType: cloudinaryResponse.resource_type,
+          sender: {
+            _id: sender._id,
+            username: sender.username,
+          },
+          timestamp: new Date(),
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Media uploaded and message sent successfully!",
+          data: {
+            chatId,
+            mediaUrl: cloudinaryResponse.url,
+            sender: sender._id,
+          },
+        });
+      } catch (error) {
+        console.error("Media upload error:", error);
+        next(new ApiError(500, "Something went wrong during media upload"));
+      }
+    }
+  );
+
+  // Other routes remain the same as they were before
   router.post(
     "/create",
     verifyJWT,
@@ -80,7 +142,6 @@ const initializeChatRoutes = ({ triggerPusherEvent }) => {
       validate,
     ],
     (req, res, next) => {
-      // You would add your logic for this route here
       res.status(501).json({ success: false, message: "Not Implemented" });
     }
   );
@@ -187,21 +248,6 @@ const initializeChatRoutes = ({ triggerPusherEvent }) => {
         .trim()
         .isMongoId()
         .withMessage("Message ID must be valid"),
-      validate,
-    ],
-    (req, res, next) => {
-      res.status(501).json({ success: false, message: "Not Implemented" });
-    }
-  );
-
-  router.post(
-    "/:chatId/upload-media",
-    verifyJWT,
-    upload.single("media"), // Using multer middleware
-    [
-      param("chatId")
-        .isMongoId()
-        .withMessage("Chat ID must be a valid MongoDB ObjectId"),
       validate,
     ],
     (req, res, next) => {
