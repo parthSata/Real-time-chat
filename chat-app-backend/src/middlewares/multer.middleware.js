@@ -22,12 +22,6 @@
 
 import multer from "multer";
 
-// We no longer need the 'fs' or 'path' imports,
-// as we are not interacting with the local file system.
-
-// Use multer.memoryStorage() instead of multer.diskStorage().
-// This stores the file in memory as a buffer, which is perfect for
-// directly uploading to a cloud service like Cloudinary.
 const storage = multer.memoryStorage();
 
 export const upload = multer({ storage });

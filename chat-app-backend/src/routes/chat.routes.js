@@ -4,7 +4,7 @@ import { body, param, validationResult } from "express-validator";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { ApiError } from "../utils/ApiError.js";
 import { upload } from "../middlewares/multer.middleware.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js"; // You will need to create this utility function
+import { uploadInCloudinary } from "../utils/cloudinary.js"; // You will need to create this utility function
 
 const router = express.Router();
 
@@ -91,7 +91,7 @@ const initializeChatRoutes = ({ triggerPusherEvent }) => {
         }
 
         // Upload the file directly from memory to Cloudinary
-        const cloudinaryResponse = await uploadOnCloudinary(mediaFile);
+        const cloudinaryResponse = await uploadInCloudinary(mediaFile);
 
         if (!cloudinaryResponse || !cloudinaryResponse.url) {
           return next(
