@@ -54,11 +54,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
     >
       <div className="flex flex-col">
         <div
-          className={`px-2 rounded-lg ${
-            message.isMe
-              ? 'bg-primary-500 text-[#bed5ed]'
-              : 'text-gray-800'
-          }`}
+          className={`px-2 rounded-lg ${message.isMe
+            ? 'bg-primary-500 text-[#bed5ed]'
+            : 'text-gray-800'
+            }`}
         >
           <div className="text-lg break-words">
             {isTextMessage ? (

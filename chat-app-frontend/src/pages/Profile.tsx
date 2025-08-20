@@ -23,7 +23,7 @@ const Profile: React.FC = () => {
     }
 
     if (user) {
-      setName(user.name);
+      setName(user.username);
       setEmail(user.email);
     }
   }, [user, isAuthenticated, navigate]);
@@ -80,7 +80,7 @@ const Profile: React.FC = () => {
                 <div className="relative">
                   <motion.img
                     whileHover={{ scale: 1.05 }}
-                    src={user.avatar}
+                    src={user.profilePic}
                     alt="Profile"
                     className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800"
                   />

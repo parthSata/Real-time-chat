@@ -3,32 +3,24 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import http from "http";
-import { Server } from "socket.io";
+// All Socket.IO imports have been removed.
 import userRouter from "./routes/user.routes.js";
 import initializeChatRoutes from "./routes/chat.routes.js";
-import initializeChatSocket from "./controllers/chat.controller.js";
 import { ApiError } from "./utils/ApiError.js";
+// Importing the Pusher trigger function from your pusher.js file
+import { triggerPusherEvent } from "./utils/Pusher.js";
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
 
-// Initialize online users map
-const onlineUsers = new Map();
-
-// Initialize chat controller with Socket.IO and onlineUsers
-const chatController = initializeChatSocket(io, onlineUsers);
+// Get the CORS origin from the environment variables.
+// Use your specific Vercel URL in production, or localhost for development.
+const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:5173";
 
 // Middleware
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: corsOrigin,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -42,7 +34,9 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/v1/users", userRouter);
-app.use("/api/v1/chats", initializeChatRoutes(chatController));
+
+// Initialize chat routes by passing the Pusher trigger function
+app.use("/api/v1/chats", initializeChatRoutes({ triggerPusherEvent }));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -58,8 +52,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     success: false,
     message: "Something went wrong!",
-    error: process.env.VITE_NODE_ENV === "development" ? err.message : undefined,
+    error:
+      process.env.VITE_NODE_ENV === "development" ? err.message : undefined,
   });
 });
 
-export { app, server, io };
+export { app, server };

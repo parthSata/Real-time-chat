@@ -85,7 +85,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Session check error:', error.message);
       if (error.response?.status === 401) {
         try {
-          const refreshResponse = await axios.post(
+          // FIX: Removed the unused variable `refreshResponse`.
+          await axios.post(
             'http://localhost:3000/api/v1/users/refresh-token',
             {},
             { withCredentials: true }

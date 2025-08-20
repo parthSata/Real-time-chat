@@ -53,6 +53,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
   const [isVideoCallActive, setIsVideoCallActive] = useState<boolean>(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  // @ts-ignore
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isInitiator, setIsInitiator] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -521,7 +522,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const profilePic = chat.isGroupChat
     ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
     : chat.participants.find((p) => p._id !== user._id)?.profilePic ||
-      `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 relative">

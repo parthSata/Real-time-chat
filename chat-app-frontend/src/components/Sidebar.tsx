@@ -47,15 +47,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         className="fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 shadow-lg z-50 flex flex-col"
       >
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center space-x-3">
-          {user?.avatar && (
+          {user?.profilePic && (
             <img
-              src={user.avatar}
+              src={user?.profilePic}
               alt="Profile"
               className="w-10 h-10 rounded-full"
             />
           )}
           <div>
-            <h3 className="font-semibold text-blue-300">{user?.name || 'User'}</h3>
+            <h3 className="font-semibold text-blue-300">{user?.username || 'User'}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email || 'user@example.com'}</p>
           </div>
         </div>
