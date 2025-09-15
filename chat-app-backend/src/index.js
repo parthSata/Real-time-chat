@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import ConnectDB from "./db/config.js";
 import { server } from "./app.js";
-// Hello World 
 
 dotenv.config({
   path: "./env",

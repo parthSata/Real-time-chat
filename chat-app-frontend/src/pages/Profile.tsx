@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 const Profile: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [bio, setBio] = useState('Software developer passionate about creating beautiful user experiences.');
   const [isEditing, setIsEditing] = useState(false);
@@ -23,7 +23,7 @@ const Profile: React.FC = () => {
     }
 
     if (user) {
-      setName(user.name);
+      setUsername(user.username);
       setEmail(user.email);
     }
   }, [user, isAuthenticated, navigate]);
@@ -80,7 +80,7 @@ const Profile: React.FC = () => {
                 <div className="relative">
                   <motion.img
                     whileHover={{ scale: 1.05 }}
-                    src={user.avatar}
+                    src={user.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`}
                     alt="Profile"
                     className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800"
                   />
@@ -98,8 +98,8 @@ const Profile: React.FC = () => {
                 {isEditing ? (
                   <Input
                     type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="text-center font-bold text-xl"
                   />
                 ) : (
@@ -108,7 +108,7 @@ const Profile: React.FC = () => {
                     animate={{ opacity: 1 }}
                     className="text-2xl font-bold text-gray-900 dark:text-white"
                   >
-                    {name}
+                    {username}
                   </motion.h2>
                 )}
                 <p className="text-gray-500 dark:text-gray-400">{email}</p>

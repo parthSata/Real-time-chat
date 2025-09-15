@@ -47,15 +47,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         className="fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 shadow-lg z-50 flex flex-col"
       >
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center space-x-3">
-          {user?.avatar && (
-            <img
-              src={user.avatar}
-              alt="Profile"
-              className="w-10 h-10 rounded-full"
-            />
-          )}
+          <img
+            src={user?.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`}
+            alt="Profile"
+            className="w-10 h-10 rounded-full"
+          />
           <div>
-            <h3 className="font-semibold text-blue-300">{user?.name || 'User'}</h3>
+            <h3 className="font-semibold text-blue-300">{user?.username || 'User'}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email || 'user@example.com'}</p>
           </div>
         </div>
@@ -74,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-gray-200  dark:border-gray-700">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={logout}
             className="sidebar-link flex items-center space-x-3 px-3 py-2 rounded-md text-sm w-full text-red-500"

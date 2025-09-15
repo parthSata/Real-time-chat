@@ -9,8 +9,8 @@ import React, {
 import axios from "axios";
 import io, { Socket } from "socket.io-client";
 
-// Define the live backend URL
-const API_BASE_URL = "https://real-time-chat-sx0o.onrender.com";
+// Use the environment variable for the backend URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface User {
   _id: string;
@@ -72,7 +72,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     try {
       setLoading(true);
-      // Using the live URL
       const response = await axios.get(`${API_BASE_URL}/api/v1/users/me`, {
         withCredentials: true,
       });
@@ -104,14 +103,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Session check error:", error.message);
       if (error.response?.status === 401) {
         try {
-          // Using the live URL
           await axios.post(
             `${API_BASE_URL}/api/v1/users/refresh-token`,
             {},
             { withCredentials: true }
           );
 
-          // Using the live URL
           const retryResponse = await axios.get(
             `${API_BASE_URL}/api/v1/users/me`,
             {
@@ -170,7 +167,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    // Using the live URL for the WebSocket connection
+    if (!API_BASE_URL) {
+      console.error("VITE_API_BASE_URL is not defined!");
+      return;
+    }
+
     const newSocket = io(API_BASE_URL, {
       withCredentials: true,
       transports: ["websocket", "polling"],
@@ -184,14 +185,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log("Socket disconnected");
     });
 
-    newSocket.on("userOnline", (userId: string) => {
-      console.log(`User ${userId} is online`);
-    });
-
-    newSocket.on("userOffline", (userId: string) => {
-      console.log(`User ${userId} is offline`);
-    });
-
     setSocket(newSocket);
 
     return () => {
@@ -202,7 +195,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      // Using the live URL
       const response = await axios.post(
         `${API_BASE_URL}/api/v1/users/login`,
         { email, password },
@@ -248,7 +240,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       formData.append("password", password);
       if (profilePic) formData.append("profilePic", profilePic);
 
-      // Using the live URL
       const response = await axios.post(
         `${API_BASE_URL}/api/v1/users/register`,
         formData,
@@ -286,7 +277,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Using the live URL
       await axios.post(`${API_BASE_URL}/api/v1/users/logout`, {}, {
         withCredentials: true,
       });
@@ -313,7 +303,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (data.profilePic) formData.append("profilePic", data.profilePic);
       if (data.status) formData.append("status", data.status);
 
-      // Using the live URL
       const response = await axios.put(
         `${API_BASE_URL}/api/v1/users/update-profile`,
         formData,
