@@ -41,6 +41,12 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 // Routes
+app.use("/api/v1", (req, res, next) => {
+  res.status(200).json({
+    success: true,
+    message: "Welcome to Chat App API",
+  });
+});
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/chats", initializeChatRoutes(chatController));
 
