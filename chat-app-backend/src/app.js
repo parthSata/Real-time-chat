@@ -11,9 +11,14 @@ import { ApiError } from "./utils/ApiError.js";
 
 const app = express();
 const server = http.createServer(app);
+
+// --- CHANGE 1: Dynamic CORS Origin ---
+// Use an environment variable for the CORS origin to work in both development and production.
+const corsOrigin = process.env.VITE_CORS_ORIGIN || "http://localhost:5173";
+
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: corsOrigin,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -28,7 +33,7 @@ const chatController = initializeChatSocket(io, onlineUsers);
 // Middleware
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: corsOrigin,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -40,15 +45,18 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
-// Routes
-app.use("/api/v1", (req, res, next) => {
+// --- CHANGE 2: Correct Route Order ---
+// Register specific API routes BEFORE any general or welcome routes.
+app.use("/api/v1/users", userRouter);
+app.use("/api/v1/chats", initializeChatRoutes(chatController));
+
+// Moved the welcome route to the root path "/" to avoid conflicts.
+app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "Welcome to Chat App API",
   });
 });
-app.use("/api/v1/users", userRouter);
-app.use("/api/v1/chats", initializeChatRoutes(chatController));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
