@@ -5,7 +5,7 @@ import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 
-const VITE_API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface Participant {
   _id: string;

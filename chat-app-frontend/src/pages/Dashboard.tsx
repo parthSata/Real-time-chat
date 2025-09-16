@@ -12,7 +12,7 @@ import ProfileDialog from '../components/ProfileDialog';
 import CreateGroupDialog from '../components/CreateGroupDialog';
 import { useAuth } from '../context/AuthContext';
 
-const VITE_API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface User {
   _id: string;

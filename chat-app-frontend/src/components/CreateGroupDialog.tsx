@@ -4,7 +4,7 @@ import { X, Users, Search, Plus, UserMinus } from 'lucide-react';
 import Button from './Button';
 import Input from './Input';
 
-const VITE_API_BASE_URL = 'http://localhost:3000';
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 interface User {
     _id: string;
