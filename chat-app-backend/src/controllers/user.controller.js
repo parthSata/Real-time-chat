@@ -6,9 +6,14 @@ import ApiResponse from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
-const registerUser = asyncHandler(async (req, res) => {
-  const { username, email, password, status, isOnline, lastSeen } = req.body;
+const cookieOptions = {
+  httpOnly: true,
+  secure: true, // Required for cross-site cookies
+  sameSite: "None", // Required for cross-site cookies
+};
 
+const registerUser = asyncHandler(async (req, res) => {
+  const { username, email, password } = req.body;
 
   if (!username?.trim() || !email?.trim() || !password?.trim()) {
     throw new ApiError(400, "Username, email, and password are required");
@@ -31,27 +36,12 @@ const registerUser = asyncHandler(async (req, res) => {
   };
 
   if (req.files && req.files.profilePic) {
-    try {
-      const profilePicFile = req.files.profilePic[0];
-      const uploadResult = await uploadInCloudinary(profilePicFile.path);
-      if (uploadResult) {
-        userData.profilePic = uploadResult.secure_url;
-      } else {
-        console.warn(
-          "Failed to upload profile picture to Cloudinary, proceeding without it"
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Error uploading profile picture to Cloudinary:",
-        error.message
-      );
+    const profilePicFile = req.files.profilePic[0];
+    const uploadResult = await uploadInCloudinary(profilePicFile.path);
+    if (uploadResult) {
+      userData.profilePic = uploadResult.secure_url;
     }
   }
-
-  if (status) userData.status = status;
-  if (isOnline) userData.isOnline = isOnline === "true";
-  if (lastSeen) userData.lastSeen = new Date(lastSeen);
 
   const newUser = new User(userData);
   await newUser.save();
@@ -61,37 +51,26 @@ const registerUser = asyncHandler(async (req, res) => {
 
   newUser.accessToken = accessToken;
   newUser.refreshToken = refreshToken;
-  await newUser.save();
+  await newUser.save({ validateBeforeSave: false });
 
-  res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: process.env.VITE_NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.VITE_NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-
-  const userResponse = {
-    _id: newUser._id.toString(),
-    username: newUser.username,
-    email: newUser.email,
-    profilePic: newUser.profilePic || "",
-    status: newUser.status,
-    isOnline: newUser.isOnline,
-  };
+  const loggedInUser = await User.findById(newUser._id).select(
+    "-password -refreshToken"
+  );
 
   return res
     .status(201)
+    .cookie("accessToken", accessToken, {
+      ...cookieOptions,
+      maxAge: 24 * 60 * 60 * 1000,
+    })
+    .cookie("refreshToken", refreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    })
     .json(
       new ApiResponse(
         201,
-        { user: userResponse, accessToken },
+        { user: loggedInUser, accessToken },
         "User registered successfully"
       )
     );
@@ -100,55 +79,35 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-
   if (!email || !password) {
     throw new ApiError(400, "Email and password are required");
   }
 
   const user = await User.findOne({ email }).select("+password");
-  if (!user) {
+  if (!user || !(await user.isPasswordCorrect(password))) {
     throw new ApiError(401, "Invalid email or password");
   }
-
-  const isMatch = await user.isPasswordCorrect(password);
-  if (!isMatch) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-  user.isOnline = true;
-  user.lastSeen = new Date();
 
   const accessToken = user.generateAccessToken();
   const refreshToken = user.generateRefreshToken();
 
   user.accessToken = accessToken;
   user.refreshToken = refreshToken;
-  await user.save();
+  user.isOnline = true;
+  await user.save({ validateBeforeSave: false });
 
-  const options = {
-    httpOnly: true,
-    secure: process.env.VITE_NODE_ENV === "production",
-    sameSite: "strict",
-  };
-
-  const loggedInUser = {
-    _id: user._id.toString(),
-    username: user.username,
-    email: user.email,
-    profilePic: user.profilePic || "",
-    status: user.status,
-    isOnline: user.isOnline,
-  };
-
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
 
   return res
     .status(200)
     .cookie("accessToken", accessToken, {
-      ...options,
+      ...cookieOptions,
       maxAge: 24 * 60 * 60 * 1000,
     })
     .cookie("refreshToken", refreshToken, {
-      ...options,
+      ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
     .json(
@@ -163,31 +122,69 @@ const loginUser = asyncHandler(async (req, res) => {
 const logoutUser = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
   if (userId) {
-    const user = await User.findById(userId);
-    if (user) {
-      user.isOnline = false;
-      user.lastSeen = new Date();
-      user.accessToken = null;
-      user.refreshToken = null;
-      await user.save();
-    }
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        isOnline: false,
+        lastSeen: new Date(),
+        refreshToken: null, // Clear the refresh token from the database
+        accessToken: null,
+      },
+    });
   }
 
-  res.clearCookie("accessToken", {
-    httpOnly: true,
-    secure: process.env.VITE_NODE_ENV === "production",
-    sameSite: "strict",
-  });
-
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    secure: process.env.VITE_NODE_ENV === "production",
-    sameSite: "strict",
-  });
+  // ✅ Use the same consistent options to clear the cookie
+  res.clearCookie("accessToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions);
 
   return res
     .status(200)
     .json(new ApiResponse(200, {}, "Logged out successfully"));
+});
+
+const refreshToken = asyncHandler(async (req, res) => {
+  const incomingRefreshToken = req.cookies?.refreshToken;
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "No refresh token provided");
+  }
+
+  try {
+    const decoded = jwt.verify(
+      incomingRefreshToken,
+      process.env.VITE_REFRESH_TOKEN_SECRET
+    );
+
+    const user = await User.findById(decoded._id);
+    if (!user || user.refreshToken !== incomingRefreshToken) {
+      throw new ApiError(401, "Invalid or expired refresh token");
+    }
+
+    const newAccessToken = user.generateAccessToken();
+    const newRefreshToken = user.generateRefreshToken();
+
+    user.accessToken = newAccessToken;
+    user.refreshToken = newRefreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    return res
+      .status(200)
+      .cookie("accessToken", newAccessToken, {
+        ...cookieOptions,
+        maxAge: 24 * 60 * 60 * 1000,
+      })
+      .cookie("refreshToken", newRefreshToken, {
+        ...cookieOptions,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      })
+      .json(
+        new ApiResponse(
+          200,
+          { accessToken: newAccessToken },
+          "Token refreshed successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
 });
 
 const searchUser = asyncHandler(async (req, res) => {
@@ -291,51 +288,6 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(200, { user: userResponse }, "User fetched successfully")
     );
-});
-
-const refreshToken = asyncHandler(async (req, res) => {
-  const refreshToken = req.cookies?.refreshToken;
-  if (!refreshToken) {
-    throw new ApiError(401, "No refresh token provided");
-  }
-
-  try {
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.VITE_REFRESH_TOKEN_SECRET
-    );
-    const user = await User.findById(decoded._id).select("+refreshToken");
-    if (!user || user.refreshToken !== refreshToken) {
-      throw new ApiError(401, "Invalid refresh token");
-    }
-
-    const newAccessToken = user.generateAccessToken();
-    const newRefreshToken = user.generateRefreshToken();
-
-    user.accessToken = newAccessToken;
-    user.refreshToken = newRefreshToken;
-    await user.save();
-
-    const options = {
-      httpOnly: true,
-      secure: process.env.VITE_NODE_ENV === "production",
-      sameSite: "strict",
-    };
-
-    return res
-      .status(200)
-      .cookie("accessToken", newAccessToken, {
-        ...options,
-        maxAge: 24 * 60 * 60 * 1000,
-      })
-      .cookie("refreshToken", newRefreshToken, {
-        ...options,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      })
-      .json(new ApiResponse(200, {}, "Token refreshed successfully"));
-  } catch (error) {
-    throw new ApiError(401, "Invalid or expired refresh token");
-  }
 });
 
 const getAllUsers = asyncHandler(async (req, res) => {
