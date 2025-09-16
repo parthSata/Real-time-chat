@@ -12,45 +12,47 @@ import { ApiError } from "./utils/ApiError.js";
 const app = express();
 const server = http.createServer(app);
 
-// --- CHANGE 1: Dynamic CORS Origin ---
-// Use an environment variable for the CORS origin to work in both development and production.
-const corsOrigin = process.env.VITE_CORS_ORIGIN || "http://localhost:5173";
+// --- ✅ BEST PRACTICE: Define all allowed origins in an array ---
+const allowedOrigins = [
+  "https://real-time-chat-smoky-three.vercel.app", // Your deployed frontend
+  "http://localhost:5173", // Your local development frontend
+];
 
-const io = new Server(server, {
-  cors: {
-    origin: corsOrigin,
-    methods: ["GET", "POST"],
-    credentials: true,
+// --- ✅ BEST PRACTICE: Create a flexible CORS options object ---
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg =
+        "The CORS policy for this site does not allow access from the specified Origin.";
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
   },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+// --- Use the flexible CORS options for both Express and Socket.IO ---
+const io = new Server(server, {
+  cors: corsOptions,
 });
 
-// Initialize online users map
-const onlineUsers = new Map();
-
-// Initialize chat controller with Socket.IO and onlineUsers
-const chatController = initializeChatSocket(io, onlineUsers);
-
 // Middleware
-app.use(
-  cors({
-    origin: corsOrigin,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors(corsOptions)); // Use the cors options for all API routes
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
-// --- CHANGE 2: Correct Route Order ---
-// Register specific API routes BEFORE any general or welcome routes.
+// Initialize chat controller and routes
+const chatController = initializeChatSocket(io, new Map());
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/chats", initializeChatRoutes(chatController));
 
-// Moved the welcome route to the root path "/" to avoid conflicts.
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -72,8 +74,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     success: false,
     message: "Something went wrong!",
-    error:
-      process.env.VITE_NODE_ENV === "development" ? err.message : undefined,
+    error: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
 });
 
