@@ -186,7 +186,6 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 });
 
-// --- CHANGE IS HERE ---
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
@@ -195,12 +194,13 @@ const searchUser = asyncHandler(async (req, res) => {
 
   if (username && username.trim() !== "") {
     // If there is a search query, find matching users
+    // IMPORTANT: Use find() to always return an array
     users = await User.find({
       username: { $regex: username, $options: "i" },
       _id: { $ne: currentUserId },
     }).select("-password -refreshToken");
   } else {
-    // If the search query is empty, return all users (same as getAllUsers)
+    // If the search query is empty, return all users
     users = await User.find({ _id: { $ne: currentUserId } }).select(
       "-password -refreshToken"
     );
