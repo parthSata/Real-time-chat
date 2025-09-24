@@ -186,6 +186,7 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 });
 
+// --- THIS IS THE FULLY CORRECTED AND COMBINED FUNCTION ---
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;

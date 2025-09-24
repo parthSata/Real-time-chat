@@ -41,11 +41,8 @@ const Dashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [chats, setChats] = useState<Chat[]>([]);
-
-  // States for the new dynamic search feature
   const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
   const [isSearchActive, setIsSearchActive] = useState(false);
-
   const [error, setError] = useState<string>('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chatId: string } | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -89,7 +86,6 @@ const Dashboard: React.FC = () => {
       try {
         const response = await fetch(`${VITE_API_BASE_URL}${endpoint}`, { credentials: 'include' });
         const data = await response.json();
-        // Check for success AND if data is an array to prevent crashes
         if (data.success && Array.isArray(data.data)) {
           setSearchedUsers(data.data);
           setError('');
@@ -301,11 +297,14 @@ const Dashboard: React.FC = () => {
               </div>
             ) : (
               filteredChats.length > 0 ? (
-                <ChatList chats={filteredChats.map((chat) => ({
-                  ...chat,
-                  onContextMenu: (e) => handleContextMenu(e, chat._id),
-                  onClick: () => handleChatSelect(chat._id),
-                }))} onChatSelect={handleChatSelect} />
+                <ChatList
+                  chats={filteredChats.map((chat) => ({
+                    ...chat,
+                    onContextMenu: (e) => handleContextMenu(e, chat._id),
+                    onClick: () => handleChatSelect(chat._id),
+                  }))}
+                  onChatSelect={handleChatSelect}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
                   <MessageSquare size={40} className="text-gray-400 mb-4" />

@@ -18,7 +18,7 @@ class ChatController {
     const { username } = req.body;
     const currentUserId = req.user._id;
 
-    // --- FIX: Added validation to prevent 400 Bad Request error ---
+    // FIX: Added validation to prevent 400 Bad Request error
     if (!username || typeof username !== "string" || username.trim() === "") {
       throw new ApiError(400, "Username is required to create a chat.");
     }
@@ -112,8 +112,11 @@ class ChatController {
       throw new ApiError(404, "One or more users not found");
 
     const participantIds = participants.map((p) => p._id);
-    if (!participantIds.includes(currentUserId))
+
+    // FIX: Correctly check if the creator is already in the participant list
+    if (!participantIds.some((id) => id.equals(currentUserId))) {
       participantIds.push(currentUserId);
+    }
 
     const groupChat = new Chat({
       isGroupChat: true,
