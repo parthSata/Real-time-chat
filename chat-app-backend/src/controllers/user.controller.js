@@ -132,7 +132,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ Use the same consistent options to clear the cookie
   res.clearCookie("accessToken", cookieOptions);
   res.clearCookie("refreshToken", cookieOptions);
 
@@ -187,6 +186,7 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 });
 
+// --- CHANGE IS HERE ---
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
@@ -195,16 +195,14 @@ const searchUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Username query parameter is required");
   }
 
+  // Use a partial match regex to find users more easily, but still findOne to fit the UI.
   const user = await User.findOne({
-    username: { $regex: `^${username}$`, $options: "i" },
+    username: { $regex: username, $options: "i" },
+    _id: { $ne: currentUserId }, // Exclude the current user
   }).select("-password");
 
   if (!user) {
     throw new ApiError(404, "User not found");
-  }
-
-  if (user._id.toString() === currentUserId.toString()) {
-    throw new ApiError(400, "Cannot search for yourself");
   }
 
   const userResponse = {

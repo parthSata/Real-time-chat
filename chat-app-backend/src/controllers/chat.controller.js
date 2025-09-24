@@ -18,6 +18,11 @@ class ChatController {
     const { username } = req.body;
     const currentUserId = req.user._id;
 
+    // --- FIX: Added validation to prevent 400 Bad Request error ---
+    if (!username || typeof username !== "string" || username.trim() === "") {
+      throw new ApiError(400, "Username is required to create a chat.");
+    }
+
     const targetUser = await User.findOne({
       username: { $regex: `^${username}$`, $options: "i" },
     });
@@ -560,7 +565,9 @@ class ChatController {
     };
 
     chat.participants.forEach((participant) => {
-      this.io.to(participant._id.toString()).emit("videoCallInitiated", callData);
+      this.io
+        .to(participant._id.toString())
+        .emit("videoCallInitiated", callData);
     });
 
     return res

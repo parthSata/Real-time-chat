@@ -41,8 +41,8 @@ const Dashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [chats, setChats] = useState<Chat[]>([]);
-  const [filteredChats, setFilteredChats] = useState<Chat[]>([]);
-  const [searchedUser, setSearchedUser] = useState<User | null>(null);
+  const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const [error, setError] = useState<string>('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chatId: string } | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -74,21 +74,36 @@ const Dashboard: React.FC = () => {
     };
     if (isAuthenticated) fetchChats();
   }, [isAuthenticated]);
-
+  
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredChats(chats);
-      setSearchedUser(null);
-    } else {
-      const query = searchQuery.toLowerCase();
-      setFilteredChats(
-        chats.filter((chat) =>
-          chat.chatName.toLowerCase().includes(query) || (chat.lastMessage && chat.lastMessage.toLowerCase().includes(query))
-        )
-      );
-      searchUser(query);
-    }
-  }, [searchQuery, chats]);
+    const searchUsers = async () => {
+      if (!isSearchActive) return;
+
+      const trimmedQuery = searchQuery.trim();
+      const endpoint = trimmedQuery 
+        ? `/api/v1/users/search?username=${trimmedQuery}` 
+        : '/api/v1/users/all-users';
+      
+      try {
+        const response = await fetch(`${VITE_API_BASE_URL}${endpoint}`, { credentials: 'include' });
+        const data = await response.json();
+        if (data.success) {
+          setSearchedUsers(data.data);
+          setError('');
+        } else {
+          setSearchedUsers([]);
+          if(trimmedQuery) setError('No users found');
+        }
+      } catch (err) {
+        setSearchedUsers([]);
+        setError('Search failed');
+      }
+    };
+
+    const debounceTimer = setTimeout(searchUsers, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, isSearchActive]);
+
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -123,31 +138,36 @@ const Dashboard: React.FC = () => {
       socket.off('newMessage');
     };
   }, [socket, user, selectedChatId]);
-
-  const searchUser = async (username: string) => {
-    try {
-      const response = await fetch(`${VITE_API_BASE_URL}/api/v1/users/search?username=${username}`, { credentials: 'include' });
-      const data = await response.json();
-      if (data.success) setSearchedUser(data.data);
-      else setError('User not found');
-    } catch (err: any) {
-      setError('User not found');
-    }
+  
+  const handleSearchFocus = () => {
+    setIsSearchActive(true);
   };
 
+  const handleSearchBlur = () => {
+    setTimeout(() => setIsSearchActive(false), 200);
+  };
+  
   const handleCreateChat = async (username?: string) => {
+    if (!username || username.trim() === '') {
+        setError("Please select a user to start a chat.");
+        return;
+    }
     try {
       const response = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username: username || searchQuery.trim() }),
+        body: JSON.stringify({ username: username.trim() }),
       });
       const data = await response.json();
       if (data.success) {
         setChats((prev) => (prev.some((c) => c._id === data.message._id) ? prev : [data.message, ...prev]));
         setSearchQuery('');
         setSelectedChatId(data.message._id);
+        setIsSearchActive(false);
+        setError('');
+      } else {
+        setError(data.message || 'Failed to create chat');
       }
     } catch (err: any) {
       setError('Failed to create chat: ' + err.message);
@@ -215,14 +235,18 @@ const Dashboard: React.FC = () => {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!isAuthenticated) return null;
+  
+  const filteredChats = isSearchActive 
+    ? chats 
+    : chats.filter(chat => 
+        searchQuery ? chat.chatName.toLowerCase().includes(searchQuery.toLowerCase()) : true
+      );
 
   return (
     <AnimatedPage>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-        <div
-          className={`w-full md:w-1/3 lg:w-1/4 border-r bg-white dark:bg-gray-800 ${selectedChatId ? 'hidden md:block' : 'block'}`}
-        >
+        <div className={`w-full md:w-1/3 lg:w-1/4 border-r bg-white dark:bg-gray-800 ${selectedChatId ? 'hidden md:block' : 'block'}`}>
           <header className="bg-white dark:bg-gray-800 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
               <div className="flex items-center">
@@ -232,36 +256,16 @@ const Dashboard: React.FC = () => {
                 <h1 className="ml-2 md:ml-0 text-xl font-semibold text-gray-800 dark:text-white">Messages</h1>
               </div>
               <div className="flex items-center space-x-2">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setIsProfileDialogOpen(true)}
-                  className="p-2 rounded-full text-gray-500 hover:bg-gray-100"
-                >
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsProfileDialogOpen(true)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100">
                   <User size={20} />
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleCreateChat()}
-                  className="p-2 rounded-full bg-[#0284c7] text-white"
-                >
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleCreateChat()} className="p-2 rounded-full bg-[#0284c7] text-white">
                   <Plus size={20} />
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setIsGroupDialogOpen(true)}
-                  className="p-2 rounded-full bg-[#0284c7] text-white"
-                >
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsGroupDialogOpen(true)} className="p-2 rounded-full bg-[#0284c7] text-white">
                   <Users size={20} />
                 </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleLogout}
-                  className="p-2 rounded-full bg-red-500 text-white"
-                >
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleLogout} className="p-2 rounded-full bg-red-500 text-white">
                   <LogOut size={20} />
                 </motion.button>
               </div>
@@ -274,6 +278,8 @@ const Dashboard: React.FC = () => {
                   placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                  onFocus={handleSearchFocus}
+                  onBlur={handleSearchBlur}
                   className="pl-10 bg-gray-100 border-none"
                 />
               </div>
@@ -281,31 +287,31 @@ const Dashboard: React.FC = () => {
           </header>
           <div className="h-[calc(100vh-8rem)] overflow-y-auto">
             {error && <div className="mb-4 p-3 bg-red-100 text-red-700">{error}</div>}
-            {filteredChats.length > 0 ? (
-              <ChatList
-                chats={filteredChats.map((chat) => ({
-                  ...chat,
-                  onContextMenu: (e: React.MouseEvent) => handleContextMenu(e, chat._id),
-                  onClick: () => handleChatSelect(chat._id),
-                }))}
-                onChatSelect={handleChatSelect}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                <MessageSquare size={40} className="text-gray-400 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">No conversations yet</h3>
-                {searchQuery.trim() && searchedUser && (
-                  <Button onClick={() => handleCreateChat(searchQuery)} className="mt-4">
-                    Start chat with {searchQuery}
-                  </Button>
-                )}
+            
+            {isSearchActive ? (
+              <div>
+                {searchedUsers.length > 0 ? (
+                  searchedUsers.map((user) => (
+                    <div key={user._id} onMouseDown={() => handleCreateChat(user.username)} className="flex items-center space-x-3 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                      <img src={user.profilePic || `https://api.dicebear.com/8.x/initials/svg?seed=${user.username}`} alt={user.username} className="w-10 h-10 rounded-full" />
+                      <div className="flex-1"><p className="font-semibold text-gray-800 dark:text-white">{user.username}</p></div>
+                    </div>
+                  ))
+                ) : ( <div className="text-center p-8 text-gray-500">{searchQuery ? 'No users found.' : 'Loading users...'}</div> )}
               </div>
+            ) : (
+              filteredChats.length > 0 ? (
+                <ChatList chats={filteredChats.map((chat) => ({...chat, onContextMenu: (e: React.MouseEvent) => handleContextMenu(e, chat._id), onClick: () => handleChatSelect(chat._id), }))} onChatSelect={handleChatSelect}/>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                  <MessageSquare size={40} className="text-gray-400 mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">No conversations yet</h3>
+                </div>
+              )
             )}
           </div>
         </div>
-        <div
-          className={`w-full md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900 ${selectedChatId ? 'block' : 'hidden md:block'}`}
-        >
+        <div className={`w-full md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900 ${selectedChatId ? 'block' : 'hidden md:block'}`}>
           {selectedChatId ? (
             <ChatRoom key={selectedChatId} chatId={selectedChatId} onClose={() => setSelectedChatId(null)} />
           ) : (
@@ -358,11 +364,7 @@ const Dashboard: React.FC = () => {
           )}
         </AnimatePresence>
         <ProfileDialog isOpen={isProfileDialogOpen} onClose={() => setIsProfileDialogOpen(false)} />
-        <CreateGroupDialog
-          isOpen={isGroupDialogOpen}
-          onClose={() => setIsGroupDialogOpen(false)}
-          onCreateGroup={handleCreateGroup}
-        />
+        <CreateGroupDialog isOpen={isGroupDialogOpen} onClose={() => setIsGroupDialogOpen(false)} onCreateGroup={handleCreateGroup}/>
       </div>
     </AnimatedPage>
   );
