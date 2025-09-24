@@ -80,15 +80,15 @@ const Dashboard: React.FC = () => {
       if (!isSearchActive) return;
 
       const trimmedQuery = searchQuery.trim();
-      const endpoint = trimmedQuery 
-        ? `/api/v1/users/search?username=${trimmedQuery}` 
-        : '/api/v1/users/all-users';
+      // --- FIXED: Always call the `/search` endpoint. The backend now handles the empty query case. ---
+      const endpoint = `/api/v1/users/search?username=${trimmedQuery}`;
       
       try {
         const response = await fetch(`${VITE_API_BASE_URL}${endpoint}`, { credentials: 'include' });
         const data = await response.json();
         if (data.success) {
-          setSearchedUsers(data.data);
+          // data.data is now guaranteed to be an array from the backend fix
+          setSearchedUsers(data.data); 
           setError('');
         } else {
           setSearchedUsers([]);

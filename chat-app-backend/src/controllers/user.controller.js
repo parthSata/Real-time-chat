@@ -191,30 +191,24 @@ const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
 
-  if (!username) {
-    throw new ApiError(400, "Username query parameter is required");
+  let users;
+
+  if (username && username.trim() !== "") {
+    // If there is a search query, find matching users
+    users = await User.find({
+      username: { $regex: username, $options: "i" },
+      _id: { $ne: currentUserId },
+    }).select("-password -refreshToken");
+  } else {
+    // If the search query is empty, return all users (same as getAllUsers)
+    users = await User.find({ _id: { $ne: currentUserId } }).select(
+      "-password -refreshToken"
+    );
   }
 
-  // Use a partial match regex to find users more easily, but still findOne to fit the UI.
-  const user = await User.findOne({
-    username: { $regex: username, $options: "i" },
-    _id: { $ne: currentUserId }, // Exclude the current user
-  }).select("-password");
-
-  if (!user) {
-    throw new ApiError(404, "User not found");
-  }
-
-  const userResponse = {
-    _id: user._id.toString(),
-    username: user.username,
-    email: user.email,
-    profilePic: user.profilePic || "",
-    status: user.status,
-    isOnline: user.isOnline,
-  };
-
-  return res.status(200).json(new ApiResponse(200, userResponse, "User found"));
+  return res
+    .status(200)
+    .json(new ApiResponse(200, users, "Users fetched successfully"));
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
@@ -290,7 +284,6 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 
 const getAllUsers = asyncHandler(async (req, res) => {
   const currentUserId = req.user._id;
-
   const users = await User.find({ _id: { $ne: currentUserId } })
     .select("_id username profilePic isOnline")
     .lean();
