@@ -49,6 +49,7 @@ const Dashboard: React.FC = () => {
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState<boolean>(false);
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState<boolean>(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const { user, isAuthenticated, loading, logout, socket } = useAuth();
   const navigate = useNavigate();
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -66,9 +67,11 @@ const Dashboard: React.FC = () => {
           credentials: 'include',
         });
         const data = await response.json();
-        if (data.success) {
-          setChats(data.message.map((chat: Chat) => ({ ...chat, unread: 0 })));
-        } else setError(data.message || 'Failed to fetch chats');
+        if (data.success && Array.isArray(data.data)) {
+          setChats(data.data.map((chat: Chat) => ({ ...chat, unread: 0 })));
+        } else {
+          setError(data.message || 'Failed to fetch chats');
+        }
       } catch (err: any) {
         setError('Failed to fetch chats: ' + err.message);
       }
@@ -77,18 +80,23 @@ const Dashboard: React.FC = () => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const searchUsers = async () => {
-      if (!isSearchActive) return;
+    const performSearch = async () => {
+      if (!isSearchActive) {
+        setSearchedUsers([]);
+        return;
+      }
 
+      setIsSearching(true);
+      setError('');
       const trimmedQuery = searchQuery.trim();
       const endpoint = `/api/v1/users/search?username=${trimmedQuery}`;
 
       try {
         const response = await fetch(`${VITE_API_BASE_URL}${endpoint}`, { credentials: 'include' });
         const data = await response.json();
+
         if (data.success && Array.isArray(data.data)) {
           setSearchedUsers(data.data);
-          setError('');
         } else {
           setSearchedUsers([]);
           if (trimmedQuery) setError('No users found');
@@ -96,11 +104,19 @@ const Dashboard: React.FC = () => {
       } catch (err) {
         setSearchedUsers([]);
         setError('Search failed');
+      } finally {
+        setIsSearching(false);
       }
     };
 
-    const debounceTimer = setTimeout(searchUsers, 300);
-    return () => clearTimeout(debounceTimer);
+    if (isSearchActive && searchQuery.trim() === '') {
+      performSearch();
+    } else {
+      const debounceTimer = setTimeout(() => {
+        if (isSearchActive) performSearch();
+      }, 300);
+      return () => clearTimeout(debounceTimer);
+    }
   }, [searchQuery, isSearchActive]);
 
 
@@ -152,9 +168,9 @@ const Dashboard: React.FC = () => {
       });
       const data = await response.json();
       if (data.success) {
-        setChats((prev) => (prev.some((c) => c._id === data.message._id) ? prev : [data.message, ...prev]));
+        setChats((prev) => (prev.some((c) => c._id === data.data._id) ? prev : [data.data, ...prev]));
         setSearchQuery('');
-        setSelectedChatId(data.message._id);
+        setSelectedChatId(data.data._id);
         setIsSearchActive(false);
         setError('');
       } else {
@@ -180,9 +196,9 @@ const Dashboard: React.FC = () => {
       });
       const data = await response.json();
       if (data.success) {
-        setChats((prev) => [data.message, ...prev]);
+        setChats((prev) => [data.data, ...prev]);
         setIsGroupDialogOpen(false);
-        setSelectedChatId(data.message._id);
+        setSelectedChatId(data.data._id);
       } else {
         setError(data.message || 'Failed to create group');
       }
@@ -286,14 +302,20 @@ const Dashboard: React.FC = () => {
 
             {isSearchActive ? (
               <div>
-                {searchedUsers.length > 0 ? (
+                {isSearching ? (
+                  <div className="text-center p-8 text-gray-500">Loading users...</div>
+                ) : searchedUsers.length > 0 ? (
                   searchedUsers.map((user) => (
                     <div key={user._id} onMouseDown={() => handleCreateChat(user.username)} className="flex items-center space-x-3 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
                       <img src={user.profilePic || `https://api.dicebear.com/8.x/initials/svg?seed=${user.username}`} alt={user.username} className="w-10 h-10 rounded-full" />
                       <div className="flex-1"><p className="font-semibold text-gray-800 dark:text-white">{user.username}</p></div>
                     </div>
                   ))
-                ) : (<div className="text-center p-8 text-gray-500">{searchQuery ? 'No users found.' : 'Loading users...'}</div>)}
+                ) : (
+                  <div className="text-center p-8 text-gray-500">
+                    {searchQuery ? 'No users found.' : 'No other users available.'}
+                  </div>
+                )}
               </div>
             ) : (
               filteredChats.length > 0 ? (
@@ -341,7 +363,7 @@ const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Are you sure?</p>
                 <div className="mt-4 flex justify-end space-x-2">
                   <Button variant="outline" onClick={() => setShowDeleteDialog(null)}>Cancel</Button>
-                  <Button variant="primary" onClick={() => handleDeleteChat(showDeleteDialog)}>Delete</Button>
+                  <Button variant="primary" onClick={() => handleDeleteChat(showDeleteDialog!)}>Delete</Button>
                 </div>
               </div>
             </motion.div>

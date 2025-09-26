@@ -76,18 +76,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         withCredentials: true,
       });
 
+      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.message?.user?._id &&
-        typeof response.data.message.user._id === "string"
+        response.data.data?.user?._id &&
+        typeof response.data.data.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.message.user._id,
-          username: response.data.message.user.username,
-          email: response.data.message.user.email,
-          profilePic: response.data.message.user.profilePic,
-          status: response.data.message.user.status,
-          isOnline: response.data.message.user.isOnline,
+          _id: response.data.data.user._id,
+          username: response.data.data.user.username,
+          email: response.data.data.user.email,
+          profilePic: response.data.data.user.profilePic,
+          status: response.data.data.user.status,
+          isOnline: response.data.data.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);
@@ -116,18 +117,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
           );
 
+          // FIX: Changed retryResponse.data.message to retryResponse.data.data
           if (
             retryResponse.data.success &&
-            retryResponse.data.message?.user?._id &&
-            typeof retryResponse.data.message.user._id === "string"
+            retryResponse.data.data?.user?._id &&
+            typeof retryResponse.data.data.user._id === "string"
           ) {
             const newUser = {
-              _id: retryResponse.data.message.user._id,
-              username: retryResponse.data.message.user.username,
-              email: retryResponse.data.message.user.email,
-              profilePic: retryResponse.data.message.user.profilePic,
-              status: retryResponse.data.message.user.status,
-              isOnline: retryResponse.data.message.user.isOnline,
+              _id: retryResponse.data.data.user._id,
+              username: retryResponse.data.data.user.username,
+              email: retryResponse.data.data.user.email,
+              profilePic: retryResponse.data.data.user.profilePic,
+              status: retryResponse.data.data.user.status,
+              isOnline: retryResponse.data.data.user.isOnline,
             };
             setUser(newUser);
             setIsAuthenticated(true);
@@ -200,18 +202,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         { email, password },
         { withCredentials: true }
       );
+      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.message?.user?._id &&
-        typeof response.data.message.user._id === "string"
+        response.data.data?.user?._id &&
+        typeof response.data.data.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.message.user._id,
-          username: response.data.message.user.username,
-          email: response.data.message.user.email,
-          profilePic: response.data.message.user.profilePic,
-          status: response.data.message.user.status,
-          isOnline: response.data.message.user.isOnline,
+          _id: response.data.data.user._id,
+          username: response.data.data.user.username,
+          email: response.data.data.user.email,
+          profilePic: response.data.data.user.profilePic,
+          status: response.data.data.user.status,
+          isOnline: response.data.data.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);
@@ -249,18 +252,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       );
 
+      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.message?.user?._id &&
-        typeof response.data.message.user._id === "string"
+        response.data.data?.user?._id &&
+        typeof response.data.data.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.message.user._id,
-          username: response.data.message.user.username,
-          email: response.data.message.user.email,
-          profilePic: response.data.message.user.profilePic,
-          status: response.data.message.user.status,
-          isOnline: response.data.message.user.isOnline,
+          _id: response.data.data.user._id,
+          username: response.data.data.user.username,
+          email: response.data.data.user.email,
+          profilePic: response.data.data.user.profilePic,
+          status: response.data.data.user.status,
+          isOnline: response.data.data.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);

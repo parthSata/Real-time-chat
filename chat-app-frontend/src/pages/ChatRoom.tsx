@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile, Video, VolumeX, Volume2, Minimize2, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Send, Paperclip, Mic, MoreVertical, Trash2, Smile, VolumeX, Volume2, Minimize2, Maximize2 } from 'lucide-react';
 import ChatMessage from '../components/ChatMessage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
@@ -517,7 +517,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   if (!chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
   const displayName = chat.isGroupChat ? chat.chatName : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
-  const recipientId = chat.participants.find((p) => p._id !== user._id)?._id;
+  // const recipientId = chat.participants.find((p) => p._id !== user._id)?._id;
 
   const profilePic = chat.isGroupChat
     ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
@@ -559,7 +559,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            {!chat.isGroupChat && !isSelectionMode && (
+            {/* {!chat.isGroupChat && !isSelectionMode && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -569,7 +569,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               >
                 <Video size={20} />
               </motion.button>
-            )}
+            )} */}
             {isSelectionMode ? (
               <>
                 <Button

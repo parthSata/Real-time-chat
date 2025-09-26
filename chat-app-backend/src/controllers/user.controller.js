@@ -68,11 +68,11 @@ const registerUser = asyncHandler(async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
     .json(
-      new ApiResponse(
-        201,
-        { user: loggedInUser, accessToken },
-        "User registered successfully"
-      )
+      // FIX: Swapped message and data
+      new ApiResponse(201, "User registered successfully", {
+        user: loggedInUser,
+        accessToken,
+      })
     );
 });
 
@@ -111,11 +111,11 @@ const loginUser = asyncHandler(async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
     .json(
-      new ApiResponse(
-        200,
-        { user: loggedInUser, accessToken },
-        "Login successful"
-      )
+      // FIX: Swapped message and data
+      new ApiResponse(200, "Login successful", {
+        user: loggedInUser,
+        accessToken,
+      })
     );
 });
 
@@ -126,18 +126,18 @@ const logoutUser = asyncHandler(async (req, res) => {
       $set: {
         isOnline: false,
         lastSeen: new Date(),
-        refreshToken: null, // Clear the refresh token from the database
+        refreshToken: null,
         accessToken: null,
       },
     });
   }
 
   res.clearCookie("accessToken", cookieOptions);
-  res.clearCookie("refreshToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions); // FIX: Swapped message and data
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Logged out successfully"));
+    .json(new ApiResponse(200, "Logged out successfully", {}));
 });
 
 const refreshToken = asyncHandler(async (req, res) => {
@@ -175,18 +175,16 @@ const refreshToken = asyncHandler(async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       })
       .json(
-        new ApiResponse(
-          200,
-          { accessToken: newAccessToken },
-          "Token refreshed successfully"
-        )
+        // FIX: Swapped message and data
+        new ApiResponse(200, "Token refreshed successfully", {
+          accessToken: newAccessToken,
+        })
       );
   } catch (error) {
     throw new ApiError(401, "Invalid or expired refresh token");
   }
 });
 
-// --- THIS IS THE FULLY CORRECTED AND COMBINED FUNCTION ---
 const searchUser = asyncHandler(async (req, res) => {
   const { username } = req.query;
   const currentUserId = req.user._id;
@@ -194,22 +192,19 @@ const searchUser = asyncHandler(async (req, res) => {
   let users;
 
   if (username && username.trim() !== "") {
-    // If there is a search query, find matching users
-    // IMPORTANT: Use find() to always return an array
     users = await User.find({
       username: { $regex: username, $options: "i" },
       _id: { $ne: currentUserId },
     }).select("-password -refreshToken");
   } else {
-    // If the search query is empty, return all users
     users = await User.find({ _id: { $ne: currentUserId } }).select(
       "-password -refreshToken"
     );
-  }
+  } // FIX: Swapped message and data
 
   return res
     .status(200)
-    .json(new ApiResponse(200, users, "Users fetched successfully"));
+    .json(new ApiResponse(200, "Users fetched successfully", users));
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
@@ -247,11 +242,11 @@ const updateProfile = asyncHandler(async (req, res) => {
     profilePic: updatedUser.profilePic || "",
     status: updatedUser.status,
     isOnline: updatedUser.isOnline,
-  };
+  }; // FIX: Swapped message and data
 
   return res
     .status(200)
-    .json(new ApiResponse(200, userResponse, "Profile updated successfully"));
+    .json(new ApiResponse(200, "Profile updated successfully", userResponse));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
@@ -274,12 +269,12 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     profilePic: userData.profilePic || "",
     status: userData.status,
     isOnline: userData.isOnline,
-  };
+  }; // FIX: Swapped message and data
 
   return res
     .status(200)
     .json(
-      new ApiResponse(200, { user: userResponse }, "User fetched successfully")
+      new ApiResponse(200, "User fetched successfully", { user: userResponse })
     );
 });
 
@@ -292,11 +287,11 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const formattedUsers = users.map((user) => ({
     ...user,
     _id: user._id.toString(),
-  }));
+  })); // FIX: Swapped message and data
 
   return res
     .status(200)
-    .json(new ApiResponse(200, formattedUsers, "Users fetched successfully"));
+    .json(new ApiResponse(200, "Users fetched successfully", formattedUsers));
 });
 
 export {

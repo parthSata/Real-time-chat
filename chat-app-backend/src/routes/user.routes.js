@@ -46,13 +46,13 @@ router.get("/me", verifyJWT, getCurrentUser);
 router.get(
   "/search",
   verifyJWT,
-  [
-    query("username")
-      .trim()
-      .isLength({ min: 1 })
-      .withMessage("Username query is required"),
-    validate,
-  ],
+  // [
+  //   query("username")
+  //     .trim()
+  //     .isLength({ min: 1 })
+  //     .withMessage("Username query is required"),
+  //   validate,
+  // ],
   searchUser
 );
 

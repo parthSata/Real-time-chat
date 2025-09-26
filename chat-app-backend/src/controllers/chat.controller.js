@@ -290,30 +290,54 @@ class ChatController {
 
     const chats = await Chat.find({ participants: currentUserId })
       .populate("participants", "_id username profilePic isOnline status")
-      .populate("lastMessage", "message messageType")
+      .populate({
+        path: "lastMessage",
+        populate: {
+          path: "sender",
+          select: "username",
+        },
+      })
       .sort({ updatedAt: -1 })
       .lean();
 
     const formattedChats = chats.map((chat) => {
-      chat._id = chat._id.toString();
-      chat.participants = chat.participants.map((p) => ({
-        ...p,
-        _id: p._id.toString(),
-      }));
+      let lastMessageContent = "";
       if (chat.lastMessage) {
-        chat.lastMessage._id = chat.lastMessage._id.toString();
-        chat.lastMessage.message =
+        const decryptedMessage =
           chat.lastMessage.messageType === "text"
             ? decrypt(chat.lastMessage.message)
-            : chat.lastMessage.message;
-        chat.lastMessage = chat.lastMessage.message;
+            : "Media";
+
+        if (
+          chat.lastMessage.sender._id.toString() === currentUserId.toString()
+        ) {
+          lastMessageContent = `You: ${decryptedMessage}`;
+        } else {
+          lastMessageContent = decryptedMessage;
+        }
       }
-      return chat;
+
+      const chatPartner = chat.participants.find(
+        (p) => p._id.toString() !== currentUserId.toString()
+      );
+
+      return {
+        ...chat,
+        _id: chat._id.toString(),
+        chatName: chat.isGroupChat ? chat.chatName : chatPartner?.username,
+        profilePic: chat.isGroupChat ? null : chatPartner?.profilePic,
+        participants: chat.participants.map((p) => ({
+          ...p,
+          _id: p._id.toString(),
+        })),
+        lastMessage: lastMessageContent,
+      };
     });
 
+    // FIX: Swapped message and data
     return res
       .status(200)
-      .json(new ApiResponse(200, formattedChats, "Chats fetched successfully"));
+      .json(new ApiResponse(200, "Chats fetched successfully", formattedChats));
   });
 
   getChatById = asyncHandler(async (req, res) => {
@@ -339,11 +363,12 @@ class ChatController {
       chat.lastMessage = chat.lastMessage.message;
     }
 
+    // FIX: Swapped message and data
     return res
       .status(200)
-      .json(new ApiResponse(200, chat, "Chat retrieved successfully"));
+      .json(new ApiResponse(200, "Chat retrieved successfully", chat));
   });
-
+  
   getChatMessages = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
     const userId = req.user._id;
