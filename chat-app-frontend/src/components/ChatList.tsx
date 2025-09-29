@@ -9,16 +9,15 @@ interface Chat {
   isGroupChat: boolean;
   chatName: string;
   unread: number;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  onClick?: () => void;
 }
 
 interface ChatListProps {
   chats: Chat[];
   onChatSelect: (chatId: string) => void;
+  onContextMenu: (e: React.MouseEvent, chatId: string) => void;
 }
 
-const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
+const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect, onContextMenu }) => {
   const { user } = useAuth();
 
   if (!user) return <div className="text-gray-900 dark:text-white">User not authenticated</div>;
@@ -26,19 +25,18 @@ const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
   return (
     <div>
       {chats.map((chat) => {
-        const displayName = chat.isGroupChat
-          ? chat.chatName
-          : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
+        const participants = Array.isArray(chat.participants) ? chat.participants : [];
+        const otherParticipant = participants.find((p) => p._id !== user._id);
+        const displayName = chat.isGroupChat ? chat.chatName : otherParticipant?.username || 'Unknown User';
         const profilePic = chat.isGroupChat
-          ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
-          : chat.participants.find((p) => p._id !== user._id)?.profilePic ||
-          `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+          ? `https://api.dicebear.com/7.x/initials/svg?seed=${chat.chatName}`
+          : otherParticipant?.profilePic || `https://api.dicebear.com/7.x/initials/svg?seed=${displayName}`;
 
         return (
           <div
             key={chat._id}
             onClick={() => onChatSelect(chat._id)}
-            onContextMenu={chat.onContextMenu}
+            onContextMenu={(e) => onContextMenu(e, chat._id)}
             className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <div className="p-4 flex items-center space-x-4">
@@ -47,7 +45,7 @@ const ChatList: React.FC<ChatListProps> = ({ chats, onChatSelect }) => {
                 alt={displayName}
                 className="w-12 h-12 rounded-full object-cover"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+                  (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${displayName}`;
                 }}
               />
               <div className="flex-1 min-w-0">

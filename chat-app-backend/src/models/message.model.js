@@ -5,7 +5,6 @@ const MessageSchema = new mongoose.Schema(
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     }, // User who receives notification
     sender: {
       type: mongoose.Schema.Types.ObjectId,

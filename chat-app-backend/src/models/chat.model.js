@@ -1,4 +1,3 @@
-// models/chat.model.js
 import mongoose from "mongoose";
 
 const ChatSchema = new mongoose.Schema(
@@ -37,9 +36,8 @@ const ChatSchema = new mongoose.Schema(
       default: null,
     },
     unreadCounts: {
-      type: Map,
-      of: Number,
-      default: () => new Map(),
+      type: Object, // Changed from Map to Object
+      default: {}, // Default to empty object
     },
   },
   { timestamps: true }

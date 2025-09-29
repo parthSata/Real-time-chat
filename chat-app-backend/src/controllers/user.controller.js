@@ -279,6 +279,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 });
 
 const getAllUsers = asyncHandler(async (req, res) => {
+  console.log('getAllUsers endpoint hit');
   const currentUserId = req.user._id;
   const users = await User.find({ _id: { $ne: currentUserId } })
     .select("_id username profilePic isOnline")
@@ -287,7 +288,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
   const formattedUsers = users.map((user) => ({
     ...user,
     _id: user._id.toString(),
-  })); // FIX: Swapped message and data
+  })); 
 
   return res
     .status(200)

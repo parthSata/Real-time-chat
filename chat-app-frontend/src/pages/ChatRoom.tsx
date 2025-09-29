@@ -71,7 +71,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   const videoPopupRef = useRef<HTMLDivElement>(null);
   const { user, socket } = useAuth();
 
-  // WebRTC configuration with STUN servers
   const rtcConfig: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -89,20 +88,32 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     const loadChat = async () => {
       try {
         setLoading(true);
-        const [chatResponse, messagesResponse] = await Promise.all([
-          fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' }),
-          fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' }),
-        ]);
+        const chatResponse = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}`, { credentials: 'include' });
         const chatData = await chatResponse.json();
-        const messagesData = await messagesResponse.json();
+        if (!chatData.success) {
+          throw new Error('Failed to load chat data');
+        }
+        setChat(chatData.data);
 
-        if (!chatData.success || !messagesData.success) throw new Error('Failed to load chat data');
-        setChat(chatData.message);
-        setMessages(messagesData.message.map((msg: Message) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-          messageType: msg.messageType || 'text',
-        })));
+        try {
+          const messagesResponse = await fetch(`${VITE_API_BASE_URL}/api/v1/chats/${chatId}/messages`, { credentials: 'include' });
+          const messagesData = await messagesResponse.json();
+          if (messagesData.success && Array.isArray(messagesData.data)) {
+            setMessages(messagesData.data.map((msg: Message) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+              messageType: msg.messageType || 'text',
+            })));
+          } else {
+            setMessages([]);
+            if (!messagesData.success) {
+              setError('Failed to load messages');
+            }
+          }
+        } catch (msgErr: any) {
+          setMessages([]);
+          setError('Failed to load messages: ' + msgErr.message);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load chat');
         onClose();
@@ -115,6 +126,8 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
 
   useEffect(() => {
     if (!socket || !chatId || !user || !chat) return;
+
+    const currentParticipants = Array.isArray(chat.participants) ? chat.participants : [];
 
     socket.emit('joinChat', chatId);
 
@@ -140,7 +153,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
 
     socket.on('videoCallInitiated', (callData: { chatId: string; initiatorId: string; recipientId: string }) => {
       if (callData.chatId === chatId && callData.recipientId === user._id) {
-        if (window.confirm(`${chat.participants.find(p => p._id === callData.initiatorId)?.username} is calling you. Accept?`)) {
+        if (window.confirm(`${currentParticipants.find(p => p._id === callData.initiatorId)?.username} is calling you. Accept?`)) {
           startVideoCall(false, callData.initiatorId);
           socket.emit('acceptVideoCall', { chatId });
         }
@@ -158,13 +171,11 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
 
       try {
         if ('type' in signal) {
-          // Handle offer or answer
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signal));
           if (signal.type === 'offer' && !isInitiator) {
-            // Create and send answer
             const answer = await peerConnectionRef.current.createAnswer();
             await peerConnectionRef.current.setLocalDescription(answer);
-            const recipientId = chat.participants.find(p => p._id !== user._id)?._id;
+            const recipientId = currentParticipants.find(p => p._id !== user._id)?._id;
             if (recipientId) {
               socket.emit('videoCallSignal', {
                 chatId,
@@ -175,7 +186,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             }
           }
         } else {
-          // Handle ICE candidate
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(signal));
         }
       } catch (err: any) {
@@ -223,14 +233,13 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Draggable video popup
   useEffect(() => {
     const videoPopup = videoPopupRef.current;
     if (!videoPopup || isVideoMaximized || isVideoMinimized) return;
 
     let isDragging = false;
-    let currentX: number;
-    let currentY: number;
+    let currentX = videoPopupPosition.x;
+    let currentY = videoPopupPosition.y;
     let initialX: number;
     let initialY: number;
 
@@ -251,9 +260,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
     const onMouseUp = () => {
       isDragging = false;
     };
-
-    currentX = videoPopupPosition.x;
-    currentY = videoPopupPosition.y;
 
     videoPopup.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);
@@ -276,16 +282,13 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
       setIsVideoCallActive(true);
       setIsInitiator(initiator);
 
-      // Initialize RTCPeerConnection
       const peerConnection = new RTCPeerConnection(rtcConfig);
       peerConnectionRef.current = peerConnection;
 
-      // Add local stream tracks
       stream.getTracks().forEach((track) => {
         peerConnection.addTrack(track, stream);
       });
 
-      // Handle remote stream
       peerConnection.ontrack = (event) => {
         const [remote] = event.streams;
         setRemoteStream(remote);
@@ -294,7 +297,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         }
       };
 
-      // Handle ICE candidates
       peerConnection.onicecandidate = (event) => {
         if (event.candidate && recipientId) {
           socket?.emit('videoCallSignal', {
@@ -327,12 +329,11 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
 
   const initiateWebRTCCall = async () => {
     if (!peerConnectionRef.current || !localStream || !chat || !user) return;
-
-    const recipientId = chat.participants.find(p => p._id !== user._id)?._id;
+    const currentParticipants = Array.isArray(chat.participants) ? chat.participants : [];
+    const recipientId = currentParticipants.find(p => p._id !== user._id)?._id;
     if (!recipientId) return;
 
     try {
-      // Create offer
       const offer = await peerConnectionRef.current.createOffer();
       await peerConnectionRef.current.setLocalDescription(offer);
       socket?.emit('videoCallSignal', {
@@ -386,10 +387,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         credentials: 'include',
         body: JSON.stringify({ chatId, content: message }),
       });
-      if (!response.ok) throw new Error('Failed to send message');
+      if (!response.ok) {
+        const errorData = await response.json(); // Try to parse the error response
+        console.error('Server error response:', errorData); // Log the full error
+        throw new Error(errorData.message || 'Failed to send message');
+      }
       setMessage('');
       formRef.current?.reset();
     } catch (err: any) {
+      console.error('Send message error:', err.message); // Log the specific error
       setError(err.message);
     }
   };
@@ -514,15 +520,17 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
   };
 
   if (error) return <div className="h-screen flex items-center justify-center text-red-600">{error}</div>;
-  if (!chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+  if (loading || !chat || !user) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
-  const displayName = chat.isGroupChat ? chat.chatName : chat.participants.find((p) => p._id !== user._id)?.username || 'Unknown';
-  // const recipientId = chat.participants.find((p) => p._id !== user._id)?._id;
+  const participants = Array.isArray(chat.participants) ? chat.participants : [];
+  const otherParticipant = !chat.isGroupChat ? participants.find((p) => p._id !== user._id) : null;
 
+  const displayName = chat.isGroupChat ? chat.chatName : otherParticipant?.username || 'Unknown';
   const profilePic = chat.isGroupChat
     ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${chat.chatName}`
-    : chat.participants.find((p) => p._id !== user._id)?.profilePic ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+    : otherParticipant?.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${displayName}`;
+
+  const recipientId = otherParticipant?._id;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 relative">
@@ -544,14 +552,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
               <div className="ml-3">
                 <h2 className="text-lg font-medium text-gray-800 dark:text-white">{displayName}</h2>
                 {chat.isGroupChat ? (
-                  <p className="text-xs text-gray-500">{chat.participants.length} members</p>
+                  <p className="text-xs text-gray-500">{participants.length} members</p>
                 ) : (
                   <div className="flex items-center">
                     <span
-                      className={`h-2 w-2 rounded-full ${chat.participants.find((p) => p._id !== user._id)?.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}
+                      className={`h-2 w-2 rounded-full ${otherParticipant?.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}
                     ></span>
                     <span className="ml-1 text-xs text-gray-500">
-                      {chat.participants.find((p) => p._id !== user._id)?.isOnline ? 'Online' : 'Offline'}
+                      {otherParticipant?.isOnline ? 'Online' : 'Offline'}
                     </span>
                   </div>
                 )}
@@ -559,7 +567,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            {/* {!chat.isGroupChat && !isSelectionMode && (
+            {!chat.isGroupChat && !isSelectionMode && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -567,9 +575,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                 className="p-2 text-gray-500 hover:text-gray-600"
                 disabled={isVideoCallActive}
               >
-                <Video size={20} />
+                <Mic size={20} />
               </motion.button>
-            )} */}
+            )}
             {isSelectionMode ? (
               <>
                 <Button
@@ -744,7 +752,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
         </AnimatePresence>
       </footer>
 
-      {/* Video Call Pop-up */}
       <AnimatePresence>
         {isVideoCallActive && (
           <motion.div
@@ -758,7 +765,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
             style={!isVideoMaximized && !isVideoMinimized ? { top: videoPopupPosition.y, left: videoPopupPosition.x } : {}}
           >
             <div className="flex flex-col h-full">
-              {/* Header for dragging and controls */}
               <div className="flex justify-between items-center p-2 bg-gray-900">
                 <span className="text-white text-sm">Video Call with {displayName}</span>
                 <div className="flex space-x-2">
@@ -799,7 +805,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                   </motion.button>
                 </div>
               </div>
-              {/* Video streams */}
               <div className="flex-1 flex flex-col sm:flex-row gap-2 p-2 bg-gray-700">
                 <div className="relative flex-1">
                   <video
@@ -823,7 +828,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                   </span>
                 </div>
               </div>
-              {/* Control buttons */}
               <div className="p-2 bg-gray-900 flex justify-center">
                 <Button
                   onClick={endVideoCall}
@@ -860,7 +864,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ chatId, onClose }) => {
                 </button>
               </div>
               <div className="max-h-60 overflow-y-auto space-y-2">
-                {chat.participants.map((p) => (
+                {participants.map((p) => (
                   <div key={p._id} className="flex justify-between items-center">
                     <span className="text-gray-900 dark:text-white">{p.username}</span>
                     {chat.createdBy === user._id && p._id !== user._id && (

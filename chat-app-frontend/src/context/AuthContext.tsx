@@ -74,62 +74,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/api/v1/users/me`, {
         withCredentials: true,
+        timeout: 10000, // 10-second timeout
       });
 
-      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.data?.user?._id &&
-        typeof response.data.data.user._id === "string"
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.data.user._id,
-          username: response.data.data.user.username,
-          email: response.data.data.user.email,
-          profilePic: response.data.data.user.profilePic,
-          status: response.data.data.user.status,
-          isOnline: response.data.data.user.isOnline,
+          _id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);
       } else {
-        console.error(
-          "Session check failed: Invalid user data",
-          response.data
-        );
+        console.error("Session check failed: Invalid user data", response.data);
         setUser(null);
         setIsAuthenticated(false);
       }
     } catch (error: any) {
-      console.error("Session check error:", error.message);
+      console.error("Session check error:", error.message, error.response?.data);
       if (error.response?.status === 401) {
         try {
           await axios.post(
             `${API_BASE_URL}/api/v1/users/refresh-token`,
             {},
-            { withCredentials: true }
+            { withCredentials: true, timeout: 10000 }
           );
 
           const retryResponse = await axios.get(
             `${API_BASE_URL}/api/v1/users/me`,
             {
               withCredentials: true,
+              timeout: 10000,
             }
           );
 
-          // FIX: Changed retryResponse.data.message to retryResponse.data.data
           if (
             retryResponse.data.success &&
-            retryResponse.data.data?.user?._id &&
-            typeof retryResponse.data.data.user._id === "string"
+            retryResponse.data.message?.user?._id &&
+            typeof retryResponse.data.message.user._id === "string"
           ) {
             const newUser = {
-              _id: retryResponse.data.data.user._id,
-              username: retryResponse.data.data.user.username,
-              email: retryResponse.data.data.user.email,
-              profilePic: retryResponse.data.data.user.profilePic,
-              status: retryResponse.data.data.user.status,
-              isOnline: retryResponse.data.data.user.isOnline,
+              _id: retryResponse.data.message.user._id,
+              username: retryResponse.data.message.user.username,
+              email: retryResponse.data.message.user.email,
+              profilePic: retryResponse.data.message.user.profilePic,
+              status: retryResponse.data.message.user.status,
+              isOnline: retryResponse.data.message.user.isOnline,
             };
             setUser(newUser);
             setIsAuthenticated(true);
@@ -141,8 +138,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(null);
             setIsAuthenticated(false);
           }
-        } catch (refreshError) {
-          console.error("Token refresh failed:", refreshError);
+        } catch (refreshError: any) {
+          console.error("Token refresh failed:", refreshError.message, refreshError.response?.data);
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -161,7 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || !user._id) {
+    if (!isAuthenticated || !user || !user._id || !API_BASE_URL) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -169,22 +166,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    if (!API_BASE_URL) {
-      console.error("VITE_API_BASE_URL is not defined!");
-      return;
-    }
-
     const newSocket = io(API_BASE_URL, {
       withCredentials: true,
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     newSocket.on("connect", () => {
+      console.log("Socket connected:", newSocket.id);
       newSocket.emit("join", user._id);
     });
 
-    newSocket.on("disconnect", () => {
-      console.log("Socket disconnected");
+    newSocket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error.message);
+    });
+
+    newSocket.on("disconnect", (reason) => {
+      console.log("Socket disconnected due to:", reason);
+    });
+
+    newSocket.on("reconnect", (attempt) => {
+      console.log("Socket reconnected after attempt:", attempt);
+      if (user && user._id) newSocket.emit("join", user._id);
     });
 
     setSocket(newSocket);
@@ -193,28 +198,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       newSocket.disconnect();
       setSocket(null);
     };
-  }, [isAuthenticated, user?._id]);
+  }, [isAuthenticated, user?._id, API_BASE_URL]);
 
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post(
         `${API_BASE_URL}/api/v1/users/login`,
         { email, password },
-        { withCredentials: true }
+        { withCredentials: true, timeout: 10000 }
       );
-      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.data?.user?._id &&
-        typeof response.data.data.user._id === "string"
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.data.user._id,
-          username: response.data.data.user.username,
-          email: response.data.data.user.email,
-          profilePic: response.data.data.user.profilePic,
-          status: response.data.data.user.status,
-          isOnline: response.data.data.user.isOnline,
+          _id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);
@@ -249,22 +253,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         {
           headers: { "Content-Type": "multipart/form-data" },
           withCredentials: true,
+          timeout: 10000,
         }
       );
 
-      // FIX: Changed response.data.message to response.data.data
       if (
         response.data.success &&
-        response.data.data?.user?._id &&
-        typeof response.data.data.user._id === "string"
+        response.data.message?.user?._id &&
+        typeof response.data.message.user._id === "string"
       ) {
         const newUser = {
-          _id: response.data.data.user._id,
-          username: response.data.data.user.username,
-          email: response.data.data.user.email,
-          profilePic: response.data.data.user.profilePic,
-          status: response.data.data.user.status,
-          isOnline: response.data.data.user.isOnline,
+          _id: response.data.message.user._id,
+          username: response.data.message.user.username,
+          email: response.data.message.user.email,
+          profilePic: response.data.message.user.profilePic,
+          status: response.data.message.user.status,
+          isOnline: response.data.message.user.isOnline,
         };
         setUser(newUser);
         setIsAuthenticated(true);
@@ -283,6 +287,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await axios.post(`${API_BASE_URL}/api/v1/users/logout`, {}, {
         withCredentials: true,
+        timeout: 10000,
       });
       setUser(null);
       setIsAuthenticated(false);
@@ -313,21 +318,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         {
           withCredentials: true,
           headers: { "Content-Type": "multipart/form-data" },
+          timeout: 10000,
         }
       );
 
       if (
         response.data.success &&
-        response.data.data?._id &&
-        typeof response.data.data._id === "string"
+        response.data.message?._id &&
+        typeof response.data.message._id === "string"
       ) {
         const updatedUser = {
-          _id: response.data.data._id,
-          username: response.data.data.username,
-          email: response.data.data.email,
-          profilePic: response.data.data.profilePic,
-          status: response.data.data.status,
-          isOnline: response.data.data.isOnline,
+          _id: response.data.message._id,
+          username: response.data.message.username,
+          email: response.data.message.email,
+          profilePic: response.data.message.profilePic,
+          status: response.data.message.status,
+          isOnline: response.data.message.isOnline,
         };
         setUser(updatedUser);
       } else {

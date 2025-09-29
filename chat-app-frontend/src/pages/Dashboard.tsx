@@ -33,8 +33,6 @@ interface Chat {
   chatName: string;
   createdBy?: string;
   unread: number;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  onClick?: () => void;
 }
 
 const Dashboard: React.FC = () => {
@@ -85,23 +83,22 @@ const Dashboard: React.FC = () => {
         setSearchedUsers([]);
         return;
       }
-
       setIsSearching(true);
       setError('');
       const trimmedQuery = searchQuery.trim();
-      const endpoint = `/api/v1/users/search?username=${trimmedQuery}`;
-
+      const endpoint = trimmedQuery ? `/api/v1/users/search?username=${encodeURIComponent(trimmedQuery)}` : '/api/v1/users/all';
       try {
+        console.log(`Fetching from: ${VITE_API_BASE_URL}${endpoint}`); // Debug log
         const response = await fetch(`${VITE_API_BASE_URL}${endpoint}`, { credentials: 'include' });
         const data = await response.json();
-
-        if (data.success && Array.isArray(data.data)) {
-          setSearchedUsers(data.data);
+        if (data.success && Array.isArray(data.message)) {
+          setSearchedUsers(data.message); // Set the entire message array as searchedUsers
         } else {
           setSearchedUsers([]);
           if (trimmedQuery) setError('No users found');
         }
       } catch (err) {
+        console.error('Fetch error:', err);
         setSearchedUsers([]);
         setError('Search failed');
       } finally {
@@ -109,11 +106,13 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    if (isSearchActive && searchQuery.trim() === '') {
+    if (isSearchActive) {
       performSearch();
-    } else {
+    }
+
+    if (isSearchActive && searchQuery.trim() !== '') {
       const debounceTimer = setTimeout(() => {
-        if (isSearchActive) performSearch();
+        performSearch();
       }, 300);
       return () => clearTimeout(debounceTimer);
     }
@@ -122,20 +121,16 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (!socket || !user) return;
-
     socket.on('newChat', (chat: Chat) => {
-      setChats((prev) => (prev.some((c) => c._id === chat._id) ? prev : [{ ...chat, unread: 0 }, ...prev]));
+      setChats((prev) => (prev.some((c) => c._id === chat._id) ? prev : [chat, ...prev]));
     });
-
     socket.on('groupUpdated', (updatedChat: Chat) => {
       setChats((prev) => prev.map((c) => (c._id === updatedChat._id ? updatedChat : c)));
     });
-
     socket.on('removedFromGroup', ({ chatId }: { chatId: string }) => {
       setChats((prev) => prev.filter((c) => c._id !== chatId));
       if (selectedChatId === chatId) setSelectedChatId(null);
     });
-
     socket.on('newMessage', (data: { chatId: string; message: { sender: { _id: string }; message: string; timestamp: string } }) => {
       setChats((prev) =>
         prev.map((chat) =>
@@ -145,7 +140,6 @@ const Dashboard: React.FC = () => {
         )
       );
     });
-
     return () => {
       socket.off('newChat');
       socket.off('groupUpdated');
@@ -166,9 +160,15 @@ const Dashboard: React.FC = () => {
         credentials: 'include',
         body: JSON.stringify({ username: username.trim() }),
       });
+
       const data = await response.json();
-      if (data.success) {
-        setChats((prev) => (prev.some((c) => c._id === data.data._id) ? prev : [data.data, ...prev]));
+
+      if (data.success && data.data?._id) {
+        setChats((prevChats) => {
+          const otherChats = prevChats.filter((chat) => chat._id !== data.data._id);
+          return [data.data, ...otherChats];
+        });
+
         setSearchQuery('');
         setSelectedChatId(data.data._id);
         setIsSearchActive(false);
@@ -184,7 +184,7 @@ const Dashboard: React.FC = () => {
   const handleNewChatClick = () => {
     setIsSearchActive(true);
     searchInputRef.current?.focus();
-  }
+  };
 
   const handleCreateGroup = async (groupName: string, participantUsernames: string[]) => {
     try {
@@ -249,7 +249,7 @@ const Dashboard: React.FC = () => {
 
   const filteredChats = chats.filter(chat =>
     searchQuery && !isSearchActive
-      ? chat.chatName.toLowerCase().includes(searchQuery.toLowerCase())
+      ? (chat.chatName || '').toLowerCase().includes(searchQuery.toLowerCase())
       : true
   );
 
@@ -257,7 +257,8 @@ const Dashboard: React.FC = () => {
     <AnimatedPage>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-        <div className={`w-full md:w-1/3 lg:w-1/4 border-r bg-white dark:bg-gray-800 ${selectedChatId ? 'hidden md:block' : 'block'}`}>
+
+        <div className={`w-full flex-col border-r bg-white dark:bg-gray-800 md:w-1/3 lg:w-1/4 ${selectedChatId ? 'hidden md:flex' : 'flex'}`}>
           <header className="bg-white dark:bg-gray-800 shadow-sm">
             <div className="px-4 py-3 flex items-center justify-between">
               <div className="flex items-center">
@@ -297,7 +298,7 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
           </header>
-          <div className="h-[calc(100vh-8rem)] overflow-y-auto">
+          <div className="flex-1 h-[calc(100vh-8rem)] overflow-y-auto">
             {error && <div className="mb-4 p-3 bg-red-100 text-red-700">{error}</div>}
 
             {isSearchActive ? (
@@ -313,19 +314,16 @@ const Dashboard: React.FC = () => {
                   ))
                 ) : (
                   <div className="text-center p-8 text-gray-500">
-                    {searchQuery ? 'No users found.' : 'No other users available.'}
+                    {searchQuery ? 'No users found.' : 'No users available.'}
                   </div>
                 )}
               </div>
             ) : (
               filteredChats.length > 0 ? (
                 <ChatList
-                  chats={filteredChats.map((chat) => ({
-                    ...chat,
-                    onContextMenu: (e) => handleContextMenu(e, chat._id),
-                    onClick: () => handleChatSelect(chat._id),
-                  }))}
+                  chats={filteredChats}
                   onChatSelect={handleChatSelect}
+                  onContextMenu={handleContextMenu}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -336,7 +334,8 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
-        <div className={`w-full md:w-2/3 lg:w-3/4 bg-gray-50 dark:bg-gray-900 ${selectedChatId ? 'block' : 'hidden md:block'}`}>
+
+        <div className={`w-full flex-col bg-gray-50 dark:bg-gray-900 md:w-2/3 lg:w-3/4 ${selectedChatId ? 'flex' : 'hidden md:flex'}`}>
           {selectedChatId ? (
             <ChatRoom key={selectedChatId} chatId={selectedChatId} onClose={() => setSelectedChatId(null)} />
           ) : (
@@ -348,6 +347,7 @@ const Dashboard: React.FC = () => {
             </div>
           )}
         </div>
+
         <AnimatePresence>
           {contextMenu && (
             <motion.div ref={contextMenuRef} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x }} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl py-1 min-w-[160px]">
