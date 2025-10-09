@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/api/v1/users/me`, {
         withCredentials: true,
-        timeout: 10000, // 10-second timeout
+        timeout: 30000, // 10-second timeout
       });
 
       if (
@@ -104,14 +104,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           await axios.post(
             `${API_BASE_URL}/api/v1/users/refresh-token`,
             {},
-            { withCredentials: true, timeout: 10000 }
+            { withCredentials: true, timeout: 30000 }
           );
 
           const retryResponse = await axios.get(
             `${API_BASE_URL}/api/v1/users/me`,
             {
               withCredentials: true,
-              timeout: 10000,
+              timeout: 30000,
             }
           );
 
@@ -205,7 +205,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await axios.post(
         `${API_BASE_URL}/api/v1/users/login`,
         { email, password },
-        { withCredentials: true, timeout: 10000 }
+        { withCredentials: true, timeout: 30000 }
       );
       if (
         response.data.success &&
@@ -253,7 +253,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         {
           headers: { "Content-Type": "multipart/form-data" },
           withCredentials: true,
-          timeout: 10000,
+          timeout: 30000,
         }
       );
 
@@ -287,7 +287,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await axios.post(`${API_BASE_URL}/api/v1/users/logout`, {}, {
         withCredentials: true,
-        timeout: 10000,
+        timeout: 30000,
       });
       setUser(null);
       setIsAuthenticated(false);
@@ -318,7 +318,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         {
           withCredentials: true,
           headers: { "Content-Type": "multipart/form-data" },
-          timeout: 10000,
+          timeout: 30000,
         }
       );
 
